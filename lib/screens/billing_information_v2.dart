@@ -114,20 +114,21 @@ class _BillingInformationV2PageState extends State<BillingInformationV2Page>
         });
       } else {
         setState(() => loading = false);
-        _showError('Server returned status ${response.statusCode}.');
+        // _showError('Server returned status ${response.statusCode}.');
+        _showError('Maintenance', 'This page is under maintenance. Please try again later.');
       }
     } catch (e) {
       setState(() => loading = false);
-      _showError('Failed to load billing data: $e');
+      _showError('Error', 'Failed to load billing data: $e');
     }
   }
 
-  void _showError(String message) {
+  void _showError(String? title, String message) {
     if (!mounted) return;
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Error'),
+        title: Text(title ?? 'Error'),
         content: Text(message),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK')),
