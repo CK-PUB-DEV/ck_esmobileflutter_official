@@ -24,12 +24,17 @@ class _CarouselCardState extends State<CarouselCard> {
   String syDesc = '';
   String sem = '';
   String totalBalance = '₱ 0.00';
+  // Shown instead of a misleading "₱ 0.00" while the balance loads or when it can't be loaded.
+  bool _balanceLoading = true;
+  String? _balanceError;
 
   List<Ledger> data = [];
   List<EnrolledStud> enrolledstud = [];
   List<SchoolInfo> schoolInfo = [];
   User user = UserData.myUser;
-  Color schoolColor = const Color.fromARGB(255, 255, 255, 255);
+  // Dark until the school colour arrives: the card's text and spinner are white, so a white
+  // default made the card look blank while loading.
+  Color schoolColor = const Color(0xFF1D1D1D);
 
   @override
   void initState() {
@@ -41,8 +46,13 @@ class _CarouselCardState extends State<CarouselCard> {
 
   Future<void> _initializeData() async {
     await getUser();
-    await getSchoolInfo();
-    await getEnrolledStud();
+
+    // School colour and enrollment don't depend on each other, so fetch them together;
+    // the ledger needs syid/semid from enrollment and runs after.
+    await Future.wait([
+      _guard('school info', getSchoolInfo),
+      _guard('enrollment', getEnrolledStud),
+    ]);
 
     final prefs = await SharedPreferences.getInstance();
     _schoolVersion = prefs.getString('schoolVersion') ?? 'v1';
@@ -50,8 +60,48 @@ class _CarouselCardState extends State<CarouselCard> {
     if (_schoolVersion == 'v2') {
       await getLedgerV2();
     } else {
-      await getLedger();
+      try {
+        await getLedger();
+      } catch (e) {
+        print('Ledger error: $e');
+        _setBalanceError('Balance is unavailable right now.');
+      }
     }
+  }
+
+  // One failed call shouldn't stop the others or leave the card stuck loading.
+  Future<void> _guard(String label, Future<void> Function() load) async {
+    try {
+      await load();
+    } catch (e) {
+      print('Carousel $label error: $e');
+    }
+  }
+
+  void _setBalance(String balance) {
+    if (!mounted) return;
+    setState(() {
+      totalBalance = balance;
+      _balanceLoading = false;
+      _balanceError = null;
+    });
+  }
+
+  void _setBalanceError(String message) {
+    if (!mounted) return;
+    setState(() {
+      _balanceLoading = false;
+      _balanceError = message;
+    });
+  }
+
+  // Prefer the server's own reason (e.g. "Student Ledger is currently unavailable.").
+  String _serverMessage(String body) {
+    try {
+      final decoded = json.decode(body);
+      if (decoded is Map && decoded['message'] is String) return decoded['message'];
+    } catch (_) {}
+    return 'Balance is unavailable right now.';
   }
 
   Future<void> getUser() async {
@@ -87,10 +137,15 @@ class _CarouselCardState extends State<CarouselCard> {
 
       if (enrolledstud.isNotEmpty) {
         final latestInfo = enrolledstud.last;
-        syid = latestInfo.syid;
-        semid = latestInfo.semid;
-        syDesc = latestInfo.sydesc;
-        sem = latestInfo.semester;
+        // setState so "SY:" and the enrollment card show now, not only once the ledger loads.
+        if (mounted) {
+          setState(() {
+            syid = latestInfo.syid;
+            semid = latestInfo.semid;
+            syDesc = latestInfo.sydesc;
+            sem = latestInfo.semester;
+          });
+        }
         print('EnrolledStud - id: $id, syid: $syid, semid: $semid, syDesc: $syDesc');
       }
     }
@@ -98,41 +153,54 @@ class _CarouselCardState extends State<CarouselCard> {
 
   Future<void> getLedgerV2() async {
     try {
-      final response = await CallApi().getV2StudLedger(id, syid, semid);
-      if (response.statusCode == 200) {
-        final decoded = json.decode(response.body) as Map<String, dynamic>;
-        if (decoded['success'] == true) {
-          final fees = decoded['school_fees'] as List<dynamic>? ?? [];
-          double total = 0;
-          for (final fee in fees) {
-            total += (fee['total_balance'] ?? 0).toDouble();
-          }
-          if (mounted) {
-            setState(() {
-              totalBalance = '₱ ${total.toStringAsFixed(2)}';
-            });
-          }
-        }
+      final response = await CallApi()
+          .getV2StudLedger(id, syid, semid)
+          .timeout(const Duration(seconds: 60));
+      if (response.statusCode != 200) {
+        _setBalanceError(_serverMessage(response.body));
+        return;
       }
+      final decoded = json.decode(response.body) as Map<String, dynamic>;
+      if (decoded['success'] != true) {
+        _setBalanceError(_serverMessage(response.body));
+        return;
+      }
+      final fees = decoded['school_fees'] as List<dynamic>? ?? [];
+      double total = 0;
+      for (final fee in fees) {
+        total += (fee['total_balance'] ?? 0).toDouble();
+      }
+      _setBalance('₱ ${total.toStringAsFixed(2)}');
     } catch (e) {
       print('V2 ledger error: $e');
+      _setBalanceError('Could not load balance. Check your connection.');
     }
   }
 
   Future<void> getLedger() async {
     print('getLedger called with - id: $id, syid: $syid, semid: $semid');
-    
-    final response = await CallApi().getStudLedger(id, syid, semid);
-    
+
+    final dynamic response;
+    try {
+      response = await CallApi()
+          .getStudLedger(id, syid, semid)
+          .timeout(const Duration(seconds: 60));
+    } catch (e) {
+      print('Ledger error: $e');
+      _setBalanceError('Could not load balance. Check your connection.');
+      return;
+    }
+
     // Print raw response data
     print('Response Status Code: ${response.statusCode}');
     print('Response Body: ${response.body}');
-    
+
     if (response.statusCode != 200) {
       print('Error: API returned status ${response.statusCode}');
+      _setBalanceError(_serverMessage(response.body));
       return;
     }
-    
+
     final list = json.decode(response.body);
     print('Decoded JSON: $list');
     
@@ -164,9 +232,7 @@ class _CarouselCardState extends State<CarouselCard> {
 
     print('Final Total found: particulars="${total.particulars}", balance="${total.balance}"');
 
-    setState(() {
-      totalBalance = '₱ ${total.balance}';
-    });
+    _setBalance('₱ ${total.balance}');
   }
 
   Color hexToColor(String hexString) {
@@ -249,14 +315,39 @@ class _CarouselCardState extends State<CarouselCard> {
                     'Current Balance',
                     style: TextStyle(color: Colors.white, fontSize: 12.0),
                   ),
-                  Text(
-                    totalBalance,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 30,
+                  if (_balanceLoading)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 10),
+                      child: SizedBox(
+                        width: 26,
+                        height: 26,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2.5,
+                        ),
+                      ),
+                    )
+                  else if (_balanceError != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(
+                        _balanceError!,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                    )
+                  else
+                    Text(
+                      totalBalance,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 30,
+                      ),
                     ),
-                  ),
                   const Spacer(),
                   Align(
                     alignment: Alignment.bottomRight,

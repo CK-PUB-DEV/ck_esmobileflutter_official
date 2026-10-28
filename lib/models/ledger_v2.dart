@@ -116,6 +116,11 @@ class V2SchoolFee {
   final double totalAmount;
   final double totalPaid;
   final double totalBalance;
+  // Vouchers, discounts and credit adjustments applied to this fee (View Account's
+  // "Discount/Credit"); totalPaid is cash only.
+  final double totalDiscount;
+  // Paid beyond this fee; Finance keeps it here until it's applied to another fee.
+  final double overpayment;
   final List<V2SchoolFeeItem> items;
 
   V2SchoolFee({
@@ -124,6 +129,8 @@ class V2SchoolFee {
     required this.totalAmount,
     required this.totalPaid,
     required this.totalBalance,
+    this.totalDiscount = 0,
+    this.overpayment = 0,
     required this.items,
   });
 
@@ -135,7 +142,40 @@ class V2SchoolFee {
       totalAmount: (json['total_amount'] ?? 0).toDouble(),
       totalPaid: (json['total_paid'] ?? 0).toDouble(),
       totalBalance: (json['total_balance'] ?? 0).toDouble(),
+      totalDiscount: (json['total_discount'] ?? 0).toDouble(),
+      overpayment: (json['overpayment'] ?? 0).toDouble(),
       items: rawItems.map((e) => V2SchoolFeeItem.fromJson(e)).toList(),
+    );
+  }
+}
+
+// One fee inside a monthly schedule row, e.g. "TUITION FEE - June" under the June 15 row.
+class V2MonthlyFee {
+  final String particulars;
+  final double amount;
+  final double payment;
+  final double discount;
+  final double balance;
+
+  V2MonthlyFee({
+    required this.particulars,
+    required this.amount,
+    required this.payment,
+    required this.discount,
+    required this.balance,
+  });
+
+  // "TUITION FEE - June" -> "TUITION FEE"; one-time adjustments keep their full name.
+  String get feeName => particulars.replaceFirst(RegExp(r' - [^-]*$'), '');
+
+  factory V2MonthlyFee.fromJson(Map<String, dynamic> json) {
+    double num_(dynamic v) => (v is num) ? v.toDouble() : (double.tryParse(v?.toString() ?? '') ?? 0);
+    return V2MonthlyFee(
+      particulars: (json['particulars'] ?? '').toString(),
+      amount: num_(json['amount']),
+      payment: num_(json['payment']),
+      discount: num_(json['discount']),
+      balance: num_(json['balance']),
     );
   }
 }
@@ -146,8 +186,11 @@ class V2MonthlyAssessment {
   final String assessmentLabel;
   final double totalDue;
   final double totalPaid;
+  // Vouchers/discounts/credits covering the period; totalPaid is cash only.
+  final double totalDiscount;
   final double balance;
   final String status;
+  final List<V2MonthlyFee> breakdown;
 
   V2MonthlyAssessment({
     required this.paymentsetupdetailId,
@@ -155,9 +198,14 @@ class V2MonthlyAssessment {
     required this.assessmentLabel,
     required this.totalDue,
     required this.totalPaid,
+    this.totalDiscount = 0,
     required this.balance,
     required this.status,
+    this.breakdown = const [],
   });
+
+  // 'YYYY-MM-DD', or null for one-time charges ('No Date').
+  DateTime? get dueOn => DateTime.tryParse(dueDate);
 
   factory V2MonthlyAssessment.fromJson(Map<String, dynamic> json) {
     return V2MonthlyAssessment(
@@ -166,8 +214,12 @@ class V2MonthlyAssessment {
       assessmentLabel: json['assessment_label'] ?? '',
       totalDue: (json['total_due'] ?? 0).toDouble(),
       totalPaid: (json['total_paid'] ?? 0).toDouble(),
+      totalDiscount: (json['total_discount'] ?? 0).toDouble(),
       balance: (json['balance'] ?? 0).toDouble(),
       status: json['status'] ?? '',
+      breakdown: ((json['breakdown'] as List<dynamic>?) ?? [])
+          .map((e) => V2MonthlyFee.fromJson(e as Map<String, dynamic>))
+          .toList(),
     );
   }
 }
@@ -202,4 +254,10 @@ class V2LedgerResponse {
 
   double get grandTotalPaid =>
       schoolFees.fold(0, (sum, f) => sum + f.totalPaid);
+
+  double get grandTotalDiscount =>
+      schoolFees.fold(0, (sum, f) => sum + f.totalDiscount);
+
+  double get grandTotalOverpayment =>
+      schoolFees.fold(0, (sum, f) => sum + f.overpayment);
 }

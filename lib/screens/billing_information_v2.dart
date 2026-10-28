@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:dropdown_button2/dropdown_button2.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:pushtrial/api/api.dart';
 import 'package:pushtrial/models/ledger_v2.dart';
@@ -32,10 +33,15 @@ class _BillingInformationV2PageState extends State<BillingInformationV2Page>
 
   late TabController _tabController;
 
+  // Monthly tab: which month groups are expanded (by label), set up once per loaded ledger.
+  static const _paidSectionKey = '__paid__';
+  final Set<String> _openMonths = {};
+  bool _monthsInitialized = false;
+
   @override
   void initState() {
     super.initState();
-    ScreenProtector.preventScreenshotOn();
+    if (!kDebugMode) ScreenProtector.preventScreenshotOn(); // debug builds stay capturable for testing
     _tabController = TabController(length: 2, vsync: this);
     _init();
   }
@@ -103,6 +109,8 @@ class _BillingInformationV2PageState extends State<BillingInformationV2Page>
   }
 
   Future<void> _loadLedger() async {
+    _openMonths.clear();
+    _monthsInitialized = false;
     setState(() => loading = true);
     try {
       final response = await CallApi().getV2StudLedger(studid, syid, semid);
@@ -295,29 +303,47 @@ class _BillingInformationV2PageState extends State<BillingInformationV2Page>
               Container(
                 color: schoolColor,
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('Total Balance', style: TextStyle(color: Colors.white70, fontSize: 11)),
-                        Text(
-                          _formatAmount(l.grandTotalBalance),
-                          style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Total Balance', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                            Text(
+                              _formatAmount(l.grandTotalBalance),
+                              style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            const Text('Total Paid', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                            Text(
+                              _formatAmount(l.grandTotalPaid),
+                              style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        const Text('Total Paid', style: TextStyle(color: Colors.white70, fontSize: 11)),
-                        Text(
-                          _formatAmount(l.grandTotalPaid),
-                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                    // Same split as View Account: Total Paid is cash; vouchers/discounts and any
+                    // overpayment Finance hasn't applied yet are shown on their own.
+                    if (l.grandTotalDiscount > 0 || l.grandTotalOverpayment > 0)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(
+                          [
+                            if (l.grandTotalDiscount > 0) 'Discount/Credit: ${_formatAmount(l.grandTotalDiscount)}',
+                            if (l.grandTotalOverpayment > 0) 'Overpayment: ${_formatAmount(l.grandTotalOverpayment)}',
+                          ].join('   •   '),
+                          style: const TextStyle(color: Colors.white70, fontSize: 11),
                         ),
-                      ],
-                    ),
+                      ),
                   ],
                 ),
               ),
@@ -329,10 +355,12 @@ class _BillingInformationV2PageState extends State<BillingInformationV2Page>
   }
 
   Widget _buildByCategoryTab() {
+    // Edge-to-edge (Android 15+): the system navigation bar overlaps the bottom of the page, so
+    // lists need that much extra bottom padding or their last item can't scroll clear of it.
     final fees = ledger!.schoolFees;
     if (fees.isEmpty) return const Center(child: Text('No fee data.'));
     return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+      padding: EdgeInsets.fromLTRB(12, 0, 12, 16 + MediaQuery.paddingOf(context).bottom),
       itemCount: fees.length,
       itemBuilder: (_, i) => _buildFeeCategoryTile(fees[i]),
     );
@@ -345,11 +373,16 @@ class _BillingInformationV2PageState extends State<BillingInformationV2Page>
       child: ExpansionTile(
         tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
         title: Text(fee.particulars, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-        subtitle: Row(
+        subtitle: Wrap(
+          spacing: 8,
+          runSpacing: 2,
           children: [
             _amountChip('Due', fee.totalBalance, Colors.red.shade700),
-            const SizedBox(width: 8),
             _amountChip('Paid', fee.totalPaid, Colors.green.shade700),
+            if (fee.totalDiscount > 0)
+              _amountChip('Discount', fee.totalDiscount, Colors.blue.shade700),
+            if (fee.overpayment > 0)
+              _amountChip('Overpaid', fee.overpayment, Colors.orange.shade800),
           ],
         ),
         children: fee.items.map((item) => _buildMonthItem(item)).toList(),
@@ -407,82 +440,376 @@ class _BillingInformationV2PageState extends State<BillingInformationV2Page>
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // Monthly tab
+  //
+  // The API returns one row per payment schedule due date, and every kind of fee has its own
+  // schedule (Misc + Tuition on the 15th, Retreat on the 24th, Yearbook + Textbook on the 30th,
+  // one-time adjustments with no date), so a month name can appear up to three times. Showing
+  // those rows as-is reads like duplicates, so this tab:
+  //   1. opens with what the student needs to know: overdue payments and the next one due;
+  //   2. lists the months that still have a balance, each expandable into its schedules
+  //      (date + the fees on it);
+  //   3. tucks the fully paid months into one collapsed section.
+  // Every figure comes straight from the API rows; nothing is recalculated here.
+  // ---------------------------------------------------------------------------
+
+  static const _monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  String _shortDate(DateTime d) => '${_monthNames[d.month - 1]} ${d.day}';
+
+  // "TUITION FEE + MISCELLANEOUS" for a schedule row; falls back to the row's own label.
+  String _scheduleFees(V2MonthlyAssessment m) {
+    final names = <String>[];
+    for (final fee in m.breakdown) {
+      final name = fee.feeName.trim();
+      if (name.isNotEmpty && !names.contains(name)) names.add(name);
+    }
+    return names.isEmpty ? m.assessmentLabel : names.join(' + ');
+  }
+
+  bool _isOverdue(V2MonthlyAssessment m, DateTime today) {
+    final due = m.dueOn;
+    return m.balance > 0.004 && due != null && due.isBefore(today);
+  }
+
+  List<_MonthGroup> _groupMonths(List<V2MonthlyAssessment> schedules) {
+    final byLabel = <String, List<V2MonthlyAssessment>>{};
+    for (final m in schedules) {
+      final label = m.dueOn == null ? 'One-time charges' : m.assessmentLabel;
+      byLabel.putIfAbsent(label, () => []).add(m);
+    }
+    final groups = byLabel.entries.map((e) => _MonthGroup(e.key, e.value)).toList();
+    // Dated months in due-date order, one-time charges last.
+    groups.sort((a, b) {
+      if (a.firstDue == null && b.firstDue == null) return 0;
+      if (a.firstDue == null) return 1;
+      if (b.firstDue == null) return -1;
+      return a.firstDue!.compareTo(b.firstDue!);
+    });
+    return groups;
+  }
+
   Widget _buildMonthlyTab() {
-    final months = ledger!.monthlyAssessments;
-    if (months.isEmpty) return const Center(child: Text('No monthly data.'));
-    return Column(
+    final schedules = ledger!.monthlyAssessments;
+    if (schedules.isEmpty) return const Center(child: Text('No monthly data.'));
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    final groups = _groupMonths(schedules);
+    final unpaid = groups.where((g) => g.balance > 0.004).toList();
+    final paid = groups.where((g) => g.balance <= 0.004).toList();
+
+    // Open the first month that still has a balance, once per loaded ledger.
+    if (!_monthsInitialized) {
+      _monthsInitialized = true;
+      if (unpaid.isNotEmpty) _openMonths.add(unpaid.first.label);
+    }
+
+    return ListView(
+      padding: EdgeInsets.fromLTRB(16, 8, 16, 24 + MediaQuery.paddingOf(context).bottom),
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-          child: Row(
-            children: [
-              const Expanded(child: Text('Month', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-              SizedBox(width: 90, child: Text('Due', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11), textAlign: TextAlign.right)),
-              const SizedBox(width: 8),
-              SizedBox(width: 90, child: Text('Balance', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11), textAlign: TextAlign.right)),
-            ],
-          ),
-        ),
+        _buildDueSummary(schedules, today),
+        const SizedBox(height: 10),
+        _monthlyHeaderRow(),
         const Divider(height: 1, thickness: 0.5),
-        Expanded(
-          child: ListView.separated(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            itemCount: months.length,
-            separatorBuilder: (_, __) => const Divider(height: 1, thickness: 0.3),
-            itemBuilder: (_, i) => _buildMonthlyRow(months[i]),
-          ),
-        ),
+        for (final g in unpaid) _buildMonthGroup(g, today),
+        if (paid.isNotEmpty) _buildPaidSection(paid, today),
       ],
     );
   }
 
-  Widget _buildMonthlyRow(V2MonthlyAssessment m) {
-    final isPending = m.status == 'pending';
-    final statusColor = isPending ? Colors.orange.shade700 : Colors.green.shade700;
+  Widget _buildDueSummary(List<V2MonthlyAssessment> schedules, DateTime today) {
+    int byDue(V2MonthlyAssessment a, V2MonthlyAssessment b) => a.dueOn!.compareTo(b.dueOn!);
+
+    final overdue = schedules.where((m) => _isOverdue(m, today)).toList()..sort(byDue);
+    final upcoming = schedules
+        .where((m) => m.balance > 0.004 && m.dueOn != null && !_isOverdue(m, today))
+        .toList()
+      ..sort(byDue);
+    final overdueTotal = overdue.fold<double>(0, (sum, m) => sum + m.balance);
+
+    if (overdue.isEmpty && upcoming.isEmpty) {
+      final oneTime = schedules.where((m) => m.dueOn == null && m.balance > 0.004).toList();
+      final oneTimeTotal = oneTime.fold<double>(0, (sum, m) => sum + m.balance);
+      return _summaryBox(
+        color: oneTime.isEmpty ? Colors.green.shade700 : Colors.orange.shade800,
+        icon: oneTime.isEmpty ? Icons.check_circle_outline : Icons.info_outline,
+        title: oneTime.isEmpty ? 'All scheduled payments are settled' : 'One-time charges: ${_formatAmount(oneTimeTotal)}',
+        lines: const [],
+      );
+    }
+
+    const maxLines = 3;
+    return Column(
+      children: [
+        if (overdue.isNotEmpty)
+          _summaryBox(
+            color: Colors.red.shade700,
+            icon: Icons.error_outline,
+            title: 'Overdue  ${_formatAmount(overdueTotal)}  •  ${overdue.length} payment${overdue.length == 1 ? '' : 's'}',
+            lines: [
+              for (final m in overdue.take(maxLines)) _SummaryLine('${_shortDate(m.dueOn!)}  ${_scheduleFees(m)}', m.balance),
+              if (overdue.length > maxLines) _SummaryLine('+ ${overdue.length - maxLines} more, see the months below', null),
+            ],
+          ),
+        if (overdue.isNotEmpty && upcoming.isNotEmpty) const SizedBox(height: 8),
+        if (upcoming.isNotEmpty)
+          _summaryBox(
+            color: schoolColor,
+            icon: Icons.event_outlined,
+            title: 'Next due  ${_shortDate(upcoming.first.dueOn!)}',
+            lines: [
+              for (final m in upcoming.where((m) => m.dueOn == upcoming.first.dueOn))
+                _SummaryLine(_scheduleFees(m), m.balance),
+            ],
+          ),
+      ],
+    );
+  }
+
+  Widget _summaryBox({
+    required Color color,
+    required IconData icon,
+    required String title,
+    required List<_SummaryLine> lines,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        border: Border.all(color: color.withValues(alpha: 0.5), width: 0.8),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 18, color: color),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(title, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: color)),
+              ),
+            ],
+          ),
+          for (final line in lines)
+            Padding(
+              padding: const EdgeInsets.only(top: 4, left: 24),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: Text(line.text, style: const TextStyle(fontSize: 11))),
+                  if (line.amount != null) ...[
+                    const SizedBox(width: 8),
+                    Text(_formatAmount(line.amount!), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                  ],
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _monthlyHeaderRow() {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          const SizedBox(width: 22),
+          const Expanded(child: Text('Month', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+          _monthlyHeaderCell('Due'),
+          _monthlyHeaderCell('Paid'),
+          _monthlyHeaderCell('Disc/ Credit'),
+          _monthlyHeaderCell('Balance'),
+        ],
+      ),
+    );
+  }
+
+  Widget _statusChip(String label, Color color) {
+    return Container(
+      margin: const EdgeInsets.only(top: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        border: Border.all(color: color, width: 0.8),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(label, style: TextStyle(fontSize: 9, color: color, fontWeight: FontWeight.bold)),
+    );
+  }
+
+  Widget _buildMonthGroup(_MonthGroup g, DateTime today) {
+    final open = _openMonths.contains(g.label);
+    final overdue = g.schedules.any((m) => _isOverdue(m, today));
+    final paid = g.balance <= 0.004;
+    final chipColor = paid
+        ? Colors.green.shade700
+        : overdue
+            ? Colors.red.shade700
+            : Colors.orange.shade700;
+    final chipLabel = paid
+        ? 'PAID'
+        : overdue
+            ? 'OVERDUE'
+            : 'PENDING';
+
+    return Column(
+      children: [
+        InkWell(
+          onTap: () => setState(() {
+            if (!_openMonths.remove(g.label)) _openMonths.add(g.label);
+          }),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Row(
               children: [
-                Text(m.assessmentLabel, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
-                Text(m.dueDate, style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                Container(
-                  margin: const EdgeInsets.only(top: 2),
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                  decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha: 0.1),
-                    border: Border.all(color: statusColor, width: 0.8),
-                    borderRadius: BorderRadius.circular(4),
+                SizedBox(
+                  width: 22,
+                  child: Icon(open ? Icons.expand_more : Icons.chevron_right, size: 18, color: Colors.grey.shade600),
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(g.label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+                      _statusChip(chipLabel, chipColor),
+                    ],
                   ),
+                ),
+                _monthlyAmountCell(g.due),
+                _monthlyAmountCell(g.paid),
+                _monthlyAmountCell(g.discount, color: g.discount > 0 ? Colors.blue.shade700 : null),
+                _monthlyAmountCell(
+                  g.balance,
+                  bold: true,
+                  color: paid ? Colors.green.shade700 : Colors.red.shade700,
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (open) ...g.schedules.map((m) => _buildScheduleRow(m, today)),
+        const Divider(height: 1, thickness: 0.3),
+      ],
+    );
+  }
+
+  Widget _buildScheduleRow(V2MonthlyAssessment m, DateTime today) {
+    final due = m.dueOn;
+    final overdue = _isOverdue(m, today);
+    return Container(
+      color: Colors.grey.withValues(alpha: 0.06),
+      padding: const EdgeInsets.only(left: 22, top: 6, bottom: 6),
+      // The fee names get the full width on their own line: beside four amount columns they were
+      // squeezed into a few characters and broke mid-word.
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text.rich(
+            TextSpan(
+              text: _scheduleFees(m),
+              children: [
+                if (overdue)
+                  TextSpan(text: '  •  overdue', style: TextStyle(color: Colors.red.shade700)),
+              ],
+            ),
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 2),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  due == null ? 'No due date' : 'Due ${_shortDate(due)}',
+                  style: TextStyle(fontSize: 10, color: overdue ? Colors.red.shade700 : Colors.grey),
+                ),
+              ),
+              _monthlyAmountCell(m.totalDue),
+              _monthlyAmountCell(m.totalPaid),
+              _monthlyAmountCell(m.totalDiscount, color: m.totalDiscount > 0 ? Colors.blue.shade700 : null),
+              _monthlyAmountCell(
+                m.balance,
+                bold: true,
+                color: m.balance > 0.004 ? Colors.red.shade700 : Colors.green.shade700,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPaidSection(List<_MonthGroup> paid, DateTime today) {
+    final open = _openMonths.contains(_paidSectionKey);
+    final first = paid.first.label;
+    final last = paid.last.label;
+    final range = paid.length == 1 ? first : '$first – $last';
+    return Column(
+      children: [
+        InkWell(
+          onTap: () => setState(() {
+            if (!_openMonths.remove(_paidSectionKey)) _openMonths.add(_paidSectionKey);
+          }),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 22,
+                  child: Icon(open ? Icons.expand_more : Icons.chevron_right, size: 18, color: Colors.grey.shade600),
+                ),
+                Icon(Icons.check_circle, size: 16, color: Colors.green.shade700),
+                const SizedBox(width: 6),
+                Expanded(
                   child: Text(
-                    m.status.toUpperCase(),
-                    style: TextStyle(fontSize: 9, color: statusColor, fontWeight: FontWeight.bold),
+                    'Fully paid: $range (${paid.length} month${paid.length == 1 ? '' : 's'})',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.green.shade800),
                   ),
                 ),
               ],
             ),
           ),
-          SizedBox(
-            width: 90,
-            child: Text(_formatAmount(m.totalDue), textAlign: TextAlign.right, style: const TextStyle(fontSize: 11)),
+        ),
+        if (open) ...paid.map((g) => _buildMonthGroup(g, today)),
+        const Divider(height: 1, thickness: 0.3),
+      ],
+    );
+  }
+
+  // The Monthly tab is table-like: four amount columns share the width, so amounts are shown
+  // without the "Php" prefix (the header makes the unit clear) and scale down rather than wrap.
+  static const double _monthlyColWidth = 56;
+
+  Widget _monthlyHeaderCell(String label) {
+    return SizedBox(
+      width: _monthlyColWidth,
+      child: Text(
+        label,
+        textAlign: TextAlign.right,
+        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+      ),
+    );
+  }
+
+  Widget _monthlyAmountCell(double amount, {bool bold = false, Color? color}) {
+    return SizedBox(
+      width: _monthlyColWidth,
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerRight,
+        child: Text(
+          _formatAmount(amount).replaceFirst('Php ', ''),
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: bold ? FontWeight.w600 : FontWeight.normal,
+            color: color,
           ),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 90,
-            child: Text(
-              _formatAmount(m.balance),
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: m.balance > 0 ? Colors.red.shade700 : Colors.green.shade700,
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -496,4 +823,32 @@ class _BillingInformationV2PageState extends State<BillingInformationV2Page>
       ],
     );
   }
+}
+
+// A month on the Monthly tab: all payment schedules that share a month name.
+class _MonthGroup {
+  final String label;
+  final List<V2MonthlyAssessment> schedules;
+
+  _MonthGroup(this.label, List<V2MonthlyAssessment> schedules)
+      : schedules = (List<V2MonthlyAssessment>.of(schedules)
+          ..sort((a, b) {
+            final ad = a.dueOn;
+            final bd = b.dueOn;
+            if (ad == null || bd == null) return 0;
+            return ad.compareTo(bd);
+          }));
+
+  double get due => schedules.fold(0, (sum, m) => sum + m.totalDue);
+  double get paid => schedules.fold(0, (sum, m) => sum + m.totalPaid);
+  double get discount => schedules.fold(0, (sum, m) => sum + m.totalDiscount);
+  double get balance => schedules.fold(0, (sum, m) => sum + m.balance);
+
+  DateTime? get firstDue => schedules.map((m) => m.dueOn).whereType<DateTime>().fold<DateTime?>(null, (min, d) => min == null || d.isBefore(min) ? d : min);
+}
+
+class _SummaryLine {
+  final String text;
+  final double? amount;
+  const _SummaryLine(this.text, this.amount);
 }
