@@ -3,6 +3,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:pushtrial/push_notifications.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:pushtrial/schools/screens/schools.dart';
@@ -51,7 +52,9 @@ void showNotification({required String title, required String body}) {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  if (!kIsWeb) {
+  // Debug builds skip the screenshot block so screens can be captured while testing;
+  // release builds stay protected.
+  if (!kIsWeb && !kDebugMode) {
     await ScreenProtector.preventScreenshotOn();
     await ScreenProtector.protectDataLeakageOn();
   }
@@ -130,6 +133,13 @@ class MyApp extends StatelessWidget {
           backgroundColor: Colors.transparent,
           elevation: 0,
           iconTheme: IconThemeData(color: Colors.black),
+          // A transparent AppBar reads as "dark", so Flutter would pick white status-bar icons
+          // that vanish on the light background. Pages are light, so force dark icons.
+          systemOverlayStyle: SystemUiOverlayStyle(
+            statusBarColor: Colors.transparent,
+            statusBarIconBrightness: Brightness.dark,
+            statusBarBrightness: Brightness.light,
+          ),
         ),
         cardTheme: CardThemeData(
           color: Colors.white,

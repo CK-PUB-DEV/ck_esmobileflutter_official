@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:pushtrial/models/year_sem.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -41,7 +42,7 @@ class BillingInformationState extends State<BillingInformationPage> {
   @override
   void initState() {
     super.initState();
-    ScreenProtector.preventScreenshotOn();
+    if (!kDebugMode) ScreenProtector.preventScreenshotOn(); // debug builds stay capturable for testing
     getUser();
     getSchoolInfo();
     getYearandSem();

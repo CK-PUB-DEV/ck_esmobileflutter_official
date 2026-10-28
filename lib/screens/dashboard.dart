@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:pushtrial/models/user.dart';
 import 'package:pushtrial/schools/models/schools.dart';
 import 'home.dart';
@@ -78,8 +79,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final screenWidth = MediaQuery.of(context).size.width;
     final itemWidth = screenWidth / 4;
     final circleSize = 50.0;
+    // BottomNavigationBar grows by the system navigation bar's height (edge-to-edge on
+    // Android 15+), so the selected-item circle has to rise by the same amount to stay in the notch.
+    final systemNavBarHeight = MediaQuery.paddingOf(context).bottom;
 
-    return Scaffold(
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      // No AppBar on this screen, so nothing else sets the status bar style: keep its icons dark.
+      value: SystemUiOverlayStyle.dark.copyWith(statusBarColor: Colors.transparent),
+      child: Scaffold(
       extendBody: true,
       body: SafeArea(
         child: Padding(
@@ -164,7 +171,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           AnimatedPositioned(
             duration: const Duration(milliseconds: 200),
             curve: Curves.easeInOut,
-            bottom: 30,
+            bottom: 30 + systemNavBarHeight,
             left: itemWidth * _selectedIndex + (itemWidth - circleSize) / 2,
             child: Container(
               width: circleSize,
@@ -190,6 +197,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
         ],
+      ),
       ),
     );
   }
