@@ -326,6 +326,13 @@ class _ReportCardScreenState extends State<ReportCardScreen> {
           .toList();
     }
 
+    // Senior high servers send the calendar rows without a semester next to the per-semester rows,
+    // with the same months and different school days. Use only the selected semester's rows then;
+    // K-12 only has rows without a semester, which are kept as they are.
+    if (attendance.any((record) => record.semid != 0)) {
+      attendance = attendance.where((record) => record.semid == semid).toList();
+    }
+
     setState(() {
       _isLoadingAttendance = false;
     });
