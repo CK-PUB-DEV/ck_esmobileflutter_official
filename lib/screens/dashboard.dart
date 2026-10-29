@@ -1,24 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pushtrial/models/user.dart';
-import 'package:pushtrial/schools/models/schools.dart';
+import 'package:pushtrial/services/firebase_push.dart';
+import 'package:pushtrial/services/school_alerts.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 import 'home.dart';
 import 'school_calendar.dart';
 import 'taphistory.dart';
 import 'profile.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:pushtrial/models/user_data.dart';
-import 'package:pushtrial/models/login.dart';
-import 'package:pushtrial/models/user_login.dart';
-import 'dart:convert';
 import 'dart:async';
 import '../widgets/school_utils.dart';
 import '../models/school_info.dart';
+import '../widgets/ui/ui.dart';
 
 class DashboardScreen extends StatefulWidget {
   final User user;
 
-  DashboardScreen({required this.user});
+  const DashboardScreen({super.key, required this.user});
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -33,7 +31,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String picurl = '';
   List<SchoolInfo> schoolInfo = [];
   String? pic = '';
-  Color schoolColor = const Color(0xFF1D1D1D);
+  Color schoolColor = const Color(0xFFD71920);
 
   @override
   void initState() {
@@ -48,6 +46,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     ];
 
     _initializeData();
+    // The first alerts check learns whether this school's server has app alerts. Then Firebase push
+    // follows it: off where the app's own alerts work (no duplicates), on where the server is old.
+    SchoolAlerts.onLoggedIn().whenComplete(FirebasePush.reconcile);
   }
 
   Future<void> _initializeData() async {
@@ -76,128 +77,90 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final itemWidth = screenWidth / 4;
-    final circleSize = 50.0;
-    // BottomNavigationBar grows by the system navigation bar's height (edge-to-edge on
-    // Android 15+), so the selected-item circle has to rise by the same amount to stay in the notch.
-    final systemNavBarHeight = MediaQuery.paddingOf(context).bottom;
+    final theme = ShadTheme.of(context);
+    final shad = theme.colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    const labels = ['Home', 'Tap history', 'Calendar', 'Profile'];
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      // No AppBar on this screen, so nothing else sets the status bar style: keep its icons dark.
-      value: SystemUiOverlayStyle.dark.copyWith(statusBarColor: Colors.transparent),
+      value: (isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark)
+          .copyWith(
+            statusBarColor: Colors.transparent,
+            systemNavigationBarColor: shad.background,
+            systemNavigationBarIconBrightness: isDark
+                ? Brightness.light
+                : Brightness.dark,
+          ),
       child: Scaffold(
-      extendBody: true,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.only(bottom: 30),
+        body: SafeArea(
           child: IndexedStack(index: _selectedIndex, children: _pages),
         ),
-      ),
-
-      bottomNavigationBar: Stack(
-        alignment: Alignment.bottomCenter,
-        clipBehavior: Clip.none,
-        children: [
-          Theme(
-            data: Theme.of(context).copyWith(
-              splashColor: Colors.transparent,
-              highlightColor: Colors.transparent,
-              hoverColor: Colors.transparent,
+        bottomNavigationBar: SafeArea(
+          top: false,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: shad.background,
+              border: Border(top: BorderSide(color: shad.border)),
             ),
-            child: ClipPath(
-              clipper: CurvedNavBarClipper(
-                selectedIndex: _selectedIndex,
-                totalItems: 4,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: Gap.md,
+                vertical: Gap.sm,
               ),
-              child: Container(
-                decoration: const BoxDecoration(
-                  color: Color(0xFF1D1D1D),
-                  boxShadow: [BoxShadow(blurRadius: 6, color: Colors.black12)],
-                ),
-                child: Material(
-                  type: MaterialType.transparency,
-                  color: Colors.transparent,
-                  child: Theme(
-                    data: Theme.of(context).copyWith(
-                      splashFactory: NoSplash.splashFactory,
-                      splashColor: Colors.transparent,
-                      highlightColor: Colors.transparent,
-                      hoverColor: Colors.transparent,
+              child: Row(
+                children: List.generate(4, (index) {
+                  final selected = index == _selectedIndex;
+                  final foreground = selected
+                      ? shad.primary
+                      : shad.mutedForeground;
+                  return Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: Gap.xs),
+                      child: Semantics(
+                        button: true,
+                        selected: selected,
+                        label: labels[index],
+                        child: ShadButton.ghost(
+                          onPressed: () => _onItemTapped(index),
+                          width: double.infinity,
+                          height: 56,
+                          padding: EdgeInsets.zero,
+                          backgroundColor: selected
+                              ? shad.accent
+                              : Colors.transparent,
+                          foregroundColor: foreground,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                _getIcon(index),
+                                size: IconSize.nav,
+                                color: foreground,
+                              ),
+                              Gap.hXs,
+                              Text(
+                                labels[index],
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.small.copyWith(
+                                  color: foreground,
+                                  fontSize: 11,
+                                  fontWeight: selected
+                                      ? FontWeight.w600
+                                      : FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
-                    child: BottomNavigationBar(
-                      currentIndex: _selectedIndex,
-                      onTap: _onItemTapped,
-                      backgroundColor: Colors.transparent,
-                      elevation: 0,
-                      type: BottomNavigationBarType.fixed,
-                      selectedItemColor: schoolColor,
-                      unselectedItemColor: Colors.grey,
-                      showSelectedLabels: false,
-                      showUnselectedLabels: false,
-                      items: [
-                        BottomNavigationBarItem(
-                          icon: _selectedIndex == 0
-                              ? const SizedBox.shrink()
-                              : const Icon(Icons.home_outlined),
-                          label: 'Home',
-                        ),
-                        BottomNavigationBarItem(
-                          icon: _selectedIndex == 1
-                              ? const SizedBox.shrink()
-                              : const Icon(Icons.sensor_occupied_outlined),
-                          label: 'Tap',
-                        ),
-                        BottomNavigationBarItem(
-                          icon: _selectedIndex == 2
-                              ? const SizedBox.shrink()
-                              : const Icon(Icons.calendar_month_outlined),
-                          label: 'Calendar',
-                        ),
-                        BottomNavigationBarItem(
-                          icon: _selectedIndex == 3
-                              ? const SizedBox.shrink()
-                              : const Icon(Icons.person),
-                          label: 'Profile',
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+                  );
+                }),
               ),
             ),
           ),
-
-          AnimatedPositioned(
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeInOut,
-            bottom: 30 + systemNavBarHeight,
-            left: itemWidth * _selectedIndex + (itemWidth - circleSize) / 2,
-            child: Container(
-              width: circleSize,
-              height: circleSize,
-              decoration: BoxDecoration(
-                color: schoolColor,
-                shape: BoxShape.circle,
-              ),
-              child: Center(
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 300),
-                  transitionBuilder: (child, animation) {
-                    return ScaleTransition(scale: animation, child: child);
-                  },
-                  child: Icon(
-                    _getIcon(_selectedIndex),
-                    key: ValueKey<int>(_selectedIndex),
-                    color: Colors.white,
-                    size: 22,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
+        ),
       ),
     );
   }
@@ -205,50 +168,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
   IconData _getIcon(int index) {
     switch (index) {
       case 0:
-        return Icons.home_outlined;
+        return LucideIcons.house;
       case 1:
-        return Icons.sensor_occupied_outlined;
+        return LucideIcons.badgeCheck;
       case 2:
-        return Icons.calendar_month_outlined;
+        return LucideIcons.calendarDays;
       case 3:
-        return Icons.person;
+        return LucideIcons.user;
       default:
-        return Icons.home_outlined;
+        return LucideIcons.house;
     }
-  }
-}
-
-class CurvedNavBarClipper extends CustomClipper<Path> {
-  final int selectedIndex;
-  final int totalItems;
-
-  CurvedNavBarClipper({required this.selectedIndex, required this.totalItems});
-
-  @override
-  Path getClip(Size size) {
-    double width = size.width;
-    double itemWidth = width / totalItems;
-    double centerX = itemWidth * selectedIndex + itemWidth / 2;
-    double radius = 40;
-
-    Path path = Path();
-    path.lineTo(centerX - radius - 10, 0);
-    path.quadraticBezierTo(centerX - radius, 0, centerX - radius + 10, 20);
-    path.arcToPoint(
-      Offset(centerX + radius - 10, 20),
-      radius: Radius.circular(40),
-      clockwise: false,
-    );
-    path.quadraticBezierTo(centerX + radius, 0, centerX + radius + 10, 0);
-    path.lineTo(width, 0);
-    path.lineTo(width, size.height);
-    path.lineTo(0, size.height);
-    path.close();
-    return path;
-  }
-
-  @override
-  bool shouldReclip(covariant CurvedNavBarClipper oldClipper) {
-    return oldClipper.selectedIndex != selectedIndex;
   }
 }

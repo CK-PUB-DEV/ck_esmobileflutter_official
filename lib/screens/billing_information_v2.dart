@@ -1,12 +1,13 @@
 import 'dart:convert';
-import 'package:dropdown_button2/dropdown_button2.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:pushtrial/api/api.dart';
 import 'package:pushtrial/models/ledger_v2.dart';
 import 'package:pushtrial/models/school_info.dart';
 import 'package:pushtrial/models/year_sem.dart';
+import 'package:pushtrial/widgets/ui/ui.dart';
 import 'package:screen_protector/screen_protector.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class BillingInformationV2Page extends StatefulWidget {
@@ -17,11 +18,20 @@ class BillingInformationV2Page extends StatefulWidget {
       _BillingInformationV2PageState();
 }
 
-class _BillingInformationV2PageState extends State<BillingInformationV2Page>
-    with SingleTickerProviderStateMixin {
+class _BillingInformationV2PageState extends State<BillingInformationV2Page> {
+
+  // Slow responses can finish after the screen was closed; skip the update then.
+  @override
+  void setState(VoidCallback fn) {
+    if (mounted) super.setState(fn);
+  }
   bool loading = true;
   V2LedgerResponse? ledger;
   Color schoolColor = const Color.fromARGB(255, 14, 19, 29);
+
+  // Shown inline when there is no ledger to display (maintenance / failed load).
+  String _errorTitle = 'Something went wrong';
+  String _errorMessage = 'Check your connection and try again.';
 
   String studid = '0';
   int syid = 1;
@@ -31,7 +41,9 @@ class _BillingInformationV2PageState extends State<BillingInformationV2Page>
   List<SchoolYear> schoolYear = [];
   List<Sem> schoolSem = [];
 
-  late TabController _tabController;
+  static const _tabCategory = 'category';
+  static const _tabMonthly = 'monthly';
+  final ShadTabsController<String> _tabs = ShadTabsController(value: _tabCategory);
 
   // Monthly tab: which month groups are expanded (by label), set up once per loaded ledger.
   static const _paidSectionKey = '__paid__';
@@ -42,14 +54,13 @@ class _BillingInformationV2PageState extends State<BillingInformationV2Page>
   void initState() {
     super.initState();
     if (!kDebugMode) ScreenProtector.preventScreenshotOn(); // debug builds stay capturable for testing
-    _tabController = TabController(length: 2, vsync: this);
     _init();
   }
 
   @override
   void dispose() {
     ScreenProtector.preventScreenshotOff();
-    _tabController.dispose();
+    _tabs.dispose();
     super.dispose();
   }
 
@@ -133,66 +144,58 @@ class _BillingInformationV2PageState extends State<BillingInformationV2Page>
 
   void _showError(String? title, String message) {
     if (!mounted) return;
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text(title ?? 'Error'),
-        content: Text(message),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK')),
-        ],
-      ),
+    _errorTitle = title ?? 'Error';
+    _errorMessage = message;
+    // With no ledger on screen the error is shown inline (with Retry); with an older ledger
+    // still showing, tell the user the refresh failed.
+    if (ledger == null) {
+      setState(() {});
+      return;
+    }
+    ShadToaster.of(context).show(
+      ShadToast.destructive(title: Text(_errorTitle), description: Text(_errorMessage)),
     );
   }
 
-  String _formatAmount(double amount) =>
-      'Php ${amount.toStringAsFixed(2).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')}';
+  // ---------------------------------------------------------------------------
+  // Shell
+  // ---------------------------------------------------------------------------
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: Text(
-          'BILLING INFORMATION',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: schoolColor),
-        ),
-        centerTitle: true,
-        bottom: loading || ledger == null
-            ? null
-            : TabBar(
-                controller: _tabController,
-                labelColor: schoolColor,
-                unselectedLabelColor: Colors.grey,
-                indicatorColor: schoolColor,
-                tabs: const [
-                  Tab(text: 'By Category'),
-                  Tab(text: 'Monthly'),
-                ],
-              ),
-      ),
-      body: loading
-          ? const Center(child: CircularProgressIndicator())
-          : ledger == null
-              ? const Center(child: Text('No data available.'))
-              : _buildContent(),
+    if (loading) {
+      return const AppPage(title: 'Billing information', body: LoadingSkeleton());
+    }
+    return AppPage(
+      title: 'Billing information',
+      children: [
+        _buildYearSemSelector(),
+        if (ledger == null)
+          ErrorState(title: _errorTitle, message: _errorMessage, onRetry: _loadLedger)
+        else ...[
+          _buildSummaryCard(),
+          _buildTabs(),
+        ],
+      ],
     );
   }
 
-  Widget _buildContent() {
+  Widget _buildTabs() {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _buildYearSemSelector(),
-        _buildSummaryCard(),
-        Expanded(
-          child: TabBarView(
-            controller: _tabController,
-            children: [
-              _buildByCategoryTab(),
-              _buildMonthlyTab(),
-            ],
-          ),
+        ShadTabs<String>(
+          controller: _tabs,
+          tabs: const [
+            ShadTab(value: _tabCategory, child: Text('By category')),
+            ShadTab(value: _tabMonthly, child: Text('Monthly')),
+          ],
+        ),
+        Gap.hMd,
+        ListenableBuilder(
+          listenable: _tabs,
+          builder: (context, _) =>
+              _tabs.selected == _tabMonthly ? _buildMonthlyTab() : _buildByCategoryTab(),
         ),
       ],
     );
@@ -200,20 +203,24 @@ class _BillingInformationV2PageState extends State<BillingInformationV2Page>
 
   Widget _buildYearSemSelector() {
     if (schoolYear.isEmpty) return const SizedBox.shrink();
+    String yearLabel(String id) =>
+        schoolYear.firstWhere((y) => y.id.toString() == id, orElse: () => schoolYear.first).sydesc;
+    String semLabel(String id) =>
+        schoolSem.firstWhere((s) => s.id.toString() == id, orElse: () => schoolSem.first).semester;
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      padding: const EdgeInsets.only(bottom: Gap.md),
       child: Row(
-        spacing: 8,
         children: [
-          Flexible(
-            child: DropdownButtonFormField2<String>(
-              value: selectedYear.isNotEmpty ? selectedYear : null,
-              items: schoolYear
-                  .map((y) => DropdownMenuItem(
-                        value: y.id.toString(),
-                        child: Text(y.sydesc, style: const TextStyle(fontSize: 11)),
-                      ))
-                  .toList(),
+          Expanded(
+            child: ShadSelect<String>(
+              placeholder: const Text('School year'),
+              initialValue: selectedYear.isNotEmpty ? selectedYear : null,
+              options: [
+                for (final y in schoolYear)
+                  ShadOption(value: y.id.toString(), child: Text(y.sydesc)),
+              ],
+              selectedOptionBuilder: (context, value) => Text(yearLabel(value)),
               onChanged: (v) {
                 if (v == null) return;
                 setState(() {
@@ -222,24 +229,19 @@ class _BillingInformationV2PageState extends State<BillingInformationV2Page>
                 });
                 _loadLedger();
               },
-              decoration: const InputDecoration(
-                labelText: 'School Year',
-                labelStyle: TextStyle(fontSize: 11),
-                border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              ),
             ),
           ),
-          if (schoolSem.isNotEmpty)
-            Flexible(
-              child: DropdownButtonFormField2<String>(
-                value: selectedSem.isNotEmpty ? selectedSem : null,
-                items: schoolSem
-                    .map((s) => DropdownMenuItem(
-                          value: s.id.toString(),
-                          child: Text(s.semester, style: const TextStyle(fontSize: 11)),
-                        ))
-                    .toList(),
+          if (schoolSem.isNotEmpty) ...[
+            Gap.wSm,
+            Expanded(
+              child: ShadSelect<String>(
+                placeholder: const Text('Semester'),
+                initialValue: selectedSem.isNotEmpty ? selectedSem : null,
+                options: [
+                  for (final s in schoolSem)
+                    ShadOption(value: s.id.toString(), child: Text(s.semester)),
+                ],
+                selectedOptionBuilder: (context, value) => Text(semLabel(value)),
                 onChanged: (v) {
                   if (v == null) return;
                   setState(() {
@@ -248,14 +250,9 @@ class _BillingInformationV2PageState extends State<BillingInformationV2Page>
                   });
                   _loadLedger();
                 },
-                decoration: const InputDecoration(
-                  labelText: 'Semester',
-                  labelStyle: TextStyle(fontSize: 11),
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                ),
               ),
             ),
+          ],
         ],
       ),
     );
@@ -263,177 +260,171 @@ class _BillingInformationV2PageState extends State<BillingInformationV2Page>
 
   Widget _buildSummaryCard() {
     final l = ledger!;
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Container(
-        decoration: BoxDecoration(borderRadius: BorderRadius.circular(16)),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: Column(
+    final theme = ShadTheme.of(context);
+    final text = theme.textTheme;
+    final info = l.studentInfo;
+    return AppCard(
+      margin: const EdgeInsets.only(bottom: Gap.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Container(
-                color: const Color.fromARGB(255, 14, 19, 29),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                child: Row(
-                  children: [
-                    const Icon(Icons.credit_card, color: Colors.white, size: 28),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            l.studentInfo.fullname,
-                            style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
-                          ),
-                          Text(
-                            '${l.studentInfo.levelname}  •  ${l.studentInfo.sectionName}',
-                            style: const TextStyle(color: Colors.white70, fontSize: 11),
-                          ),
-                          Text(
-                            l.studentInfo.granteeDescription,
-                            style: const TextStyle(color: Colors.white54, fontSize: 10),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+              Icon(LucideIcons.userRound, size: IconSize.row, color: theme.colorScheme.mutedForeground),
+              Gap.wSm,
+              Expanded(
+                child: Text(info.fullname, style: text.large, maxLines: 2, overflow: TextOverflow.ellipsis),
+              ),
+            ],
+          ),
+          Gap.hXs,
+          Text('${info.levelname}  •  ${info.sectionName}', style: text.muted),
+          if (info.granteeDescription.trim().isNotEmpty) Text(info.granteeDescription, style: text.muted),
+          Gap.hLg,
+          Divider(height: 1, color: theme.colorScheme.border),
+          Gap.hLg,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: StatTile(
+                  label: 'Total balance',
+                  value: Fmt.money(l.grandTotalBalance),
+                  icon: LucideIcons.wallet,
+                  tone: l.grandTotalBalance > 0 ? theme.colorScheme.destructive : null,
                 ),
               ),
-              Container(
-                color: schoolColor,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('Total Balance', style: TextStyle(color: Colors.white70, fontSize: 11)),
-                            Text(
-                              _formatAmount(l.grandTotalBalance),
-                              style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-                            ),
-                          ],
-                        ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            const Text('Total Paid', style: TextStyle(color: Colors.white70, fontSize: 11)),
-                            Text(
-                              _formatAmount(l.grandTotalPaid),
-                              style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    // Same split as View Account: Total Paid is cash; vouchers/discounts and any
-                    // overpayment Finance hasn't applied yet are shown on their own.
-                    if (l.grandTotalDiscount > 0 || l.grandTotalOverpayment > 0)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: Text(
-                          [
-                            if (l.grandTotalDiscount > 0) 'Discount/Credit: ${_formatAmount(l.grandTotalDiscount)}',
-                            if (l.grandTotalOverpayment > 0) 'Overpayment: ${_formatAmount(l.grandTotalOverpayment)}',
-                          ].join('   •   '),
-                          style: const TextStyle(color: Colors.white70, fontSize: 11),
-                        ),
-                      ),
-                  ],
+              Gap.wLg,
+              Expanded(
+                child: StatTile(
+                  label: 'Total paid',
+                  value: Fmt.money(l.grandTotalPaid),
+                  icon: LucideIcons.banknote,
                 ),
               ),
             ],
           ),
-        ),
+          // Same split as View Account: Total Paid is cash; vouchers/discounts and any
+          // overpayment Finance hasn't applied yet are shown on their own.
+          if (l.grandTotalDiscount > 0 || l.grandTotalOverpayment > 0) ...[
+            Gap.hMd,
+            Wrap(
+              spacing: Gap.sm,
+              runSpacing: Gap.xs,
+              children: [
+                if (l.grandTotalDiscount > 0)
+                  StatusBadge('Discount/credit ${Fmt.money(l.grandTotalDiscount)}', status: AppStatus.info),
+                if (l.grandTotalOverpayment > 0)
+                  StatusBadge('Overpayment ${Fmt.money(l.grandTotalOverpayment)}', status: AppStatus.warning),
+              ],
+            ),
+          ],
+        ],
       ),
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // By category tab
+  // ---------------------------------------------------------------------------
+
   Widget _buildByCategoryTab() {
-    // Edge-to-edge (Android 15+): the system navigation bar overlaps the bottom of the page, so
-    // lists need that much extra bottom padding or their last item can't scroll clear of it.
     final fees = ledger!.schoolFees;
-    if (fees.isEmpty) return const Center(child: Text('No fee data.'));
-    return ListView.builder(
-      padding: EdgeInsets.fromLTRB(12, 0, 12, 16 + MediaQuery.paddingOf(context).bottom),
-      itemCount: fees.length,
-      itemBuilder: (_, i) => _buildFeeCategoryTile(fees[i]),
-    );
+    if (fees.isEmpty) {
+      return const EmptyState(title: 'No fee data', message: 'Fees will appear here once assessed.');
+    }
+    return Column(children: [for (final fee in fees) _buildFeeCategoryTile(fee)]);
   }
 
   Widget _buildFeeCategoryTile(V2SchoolFee fee) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      child: ExpansionTile(
-        tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-        title: Text(fee.particulars, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-        subtitle: Wrap(
-          spacing: 8,
-          runSpacing: 2,
-          children: [
-            _amountChip('Due', fee.totalBalance, Colors.red.shade700),
-            _amountChip('Paid', fee.totalPaid, Colors.green.shade700),
-            if (fee.totalDiscount > 0)
-              _amountChip('Discount', fee.totalDiscount, Colors.blue.shade700),
-            if (fee.overpayment > 0)
-              _amountChip('Overpaid', fee.overpayment, Colors.orange.shade800),
-          ],
+    final theme = ShadTheme.of(context);
+    final text = theme.textTheme;
+    return AppCard(
+      padding: EdgeInsets.zero,
+      child: Theme(
+        // Hide ExpansionTile's own divider lines; the card border is enough.
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          shape: const Border(),
+          collapsedShape: const Border(),
+          tilePadding: const EdgeInsets.symmetric(horizontal: Gap.lg, vertical: Gap.xs),
+          childrenPadding: const EdgeInsets.only(bottom: Gap.sm),
+          title: Text(fee.particulars, style: text.p.copyWith(fontWeight: FontWeight.w600)),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: Gap.xs),
+            child: Wrap(
+              spacing: Gap.md,
+              runSpacing: Gap.xs,
+              children: [
+                _labelValue('Due', Fmt.money(fee.totalBalance),
+                    color: fee.totalBalance > 0 ? theme.colorScheme.destructive : null),
+                _labelValue('Paid', Fmt.money(fee.totalPaid)),
+                if (fee.totalDiscount > 0) _labelValue('Discount', Fmt.money(fee.totalDiscount)),
+                if (fee.overpayment > 0) _labelValue('Overpaid', Fmt.money(fee.overpayment)),
+              ],
+            ),
+          ),
+          children: fee.items.map((item) => _buildMonthItem(item)).toList(),
         ),
-        children: fee.items.map((item) => _buildMonthItem(item)).toList(),
       ),
     );
   }
 
   Widget _buildMonthItem(V2SchoolFeeItem item) {
-    return ExpansionTile(
-      tilePadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 0),
-      dense: true,
-      title: Text(item.particulars, style: const TextStyle(fontSize: 12)),
-      trailing: Text(
-        _formatAmount(item.balance),
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: item.balance > 0 ? Colors.red.shade700 : Colors.green.shade700,
+    final theme = ShadTheme.of(context);
+    final text = theme.textTheme;
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        shape: const Border(),
+        collapsedShape: const Border(),
+        dense: true,
+        tilePadding: const EdgeInsets.symmetric(horizontal: Gap.xl),
+        title: Text(item.particulars, style: text.small),
+        trailing: Text(
+          Fmt.money(item.balance),
+          style: text.small.copyWith(
+            fontWeight: FontWeight.w600,
+            color: item.balance > 0 ? theme.colorScheme.destructive : theme.colorScheme.foreground,
+          ),
         ),
+        children: [
+          if (item.nestedItems.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: Gap.xl + Gap.sm, vertical: Gap.sm),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text('No breakdown available.', style: text.muted),
+              ),
+            )
+          else
+            ...item.nestedItems.map((n) => _buildNestedItem(n)),
+        ],
       ),
-      children: [
-        if (item.nestedItems.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 32, vertical: 6),
-            child: Text('No breakdown available.', style: TextStyle(fontSize: 11, color: Colors.grey)),
-          )
-        else
-          ...item.nestedItems.map((n) => _buildNestedItem(n)),
-        const SizedBox(height: 4),
-      ],
     );
   }
 
   Widget _buildNestedItem(V2NestedItem item) {
+    final theme = ShadTheme.of(context);
+    final text = theme.textTheme;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: Gap.xl + Gap.sm, vertical: Gap.xs),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(child: Text(item.particulars, style: const TextStyle(fontSize: 11, color: Colors.black87))),
-          Text(_formatAmount(item.amount), style: const TextStyle(fontSize: 11)),
-          const SizedBox(width: 12),
-          SizedBox(
-            width: 80,
-            child: Text(
-              _formatAmount(item.balance),
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                fontSize: 11,
-                color: item.balance > 0 ? Colors.red.shade600 : Colors.green.shade600,
+          Expanded(child: Text(item.particulars, style: text.small)),
+          Gap.wMd,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(Fmt.money(item.amount), style: text.small),
+              Text(
+                'Bal ${Fmt.money(item.balance)}',
+                style: text.muted.copyWith(
+                  color: item.balance > 0 ? theme.colorScheme.destructive : theme.colorScheme.mutedForeground,
+                ),
               ),
-            ),
+            ],
           ),
         ],
       ),
@@ -453,10 +444,6 @@ class _BillingInformationV2PageState extends State<BillingInformationV2Page>
   //   3. tucks the fully paid months into one collapsed section.
   // Every figure comes straight from the API rows; nothing is recalculated here.
   // ---------------------------------------------------------------------------
-
-  static const _monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-  String _shortDate(DateTime d) => '${_monthNames[d.month - 1]} ${d.day}';
 
   // "TUITION FEE + MISCELLANEOUS" for a schedule row; falls back to the row's own label.
   String _scheduleFees(V2MonthlyAssessment m) {
@@ -492,7 +479,9 @@ class _BillingInformationV2PageState extends State<BillingInformationV2Page>
 
   Widget _buildMonthlyTab() {
     final schedules = ledger!.monthlyAssessments;
-    if (schedules.isEmpty) return const Center(child: Text('No monthly data.'));
+    if (schedules.isEmpty) {
+      return const EmptyState(title: 'No monthly data', message: 'Payment schedules will appear here.');
+    }
 
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -507,13 +496,10 @@ class _BillingInformationV2PageState extends State<BillingInformationV2Page>
       if (unpaid.isNotEmpty) _openMonths.add(unpaid.first.label);
     }
 
-    return ListView(
-      padding: EdgeInsets.fromLTRB(16, 8, 16, 24 + MediaQuery.paddingOf(context).bottom),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _buildDueSummary(schedules, today),
-        const SizedBox(height: 10),
-        _monthlyHeaderRow(),
-        const Divider(height: 1, thickness: 0.5),
         for (final g in unpaid) _buildMonthGroup(g, today),
         if (paid.isNotEmpty) _buildPaidSection(paid, today),
       ],
@@ -534,32 +520,32 @@ class _BillingInformationV2PageState extends State<BillingInformationV2Page>
       final oneTime = schedules.where((m) => m.dueOn == null && m.balance > 0.004).toList();
       final oneTimeTotal = oneTime.fold<double>(0, (sum, m) => sum + m.balance);
       return _summaryBox(
-        color: oneTime.isEmpty ? Colors.green.shade700 : Colors.orange.shade800,
-        icon: oneTime.isEmpty ? Icons.check_circle_outline : Icons.info_outline,
-        title: oneTime.isEmpty ? 'All scheduled payments are settled' : 'One-time charges: ${_formatAmount(oneTimeTotal)}',
+        tone: oneTime.isEmpty ? AppStatus.success : AppStatus.warning,
+        icon: oneTime.isEmpty ? LucideIcons.circleCheck : LucideIcons.info,
+        title: oneTime.isEmpty ? 'All scheduled payments are settled' : 'One-time charges: ${Fmt.money(oneTimeTotal)}',
         lines: const [],
       );
     }
 
     const maxLines = 3;
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (overdue.isNotEmpty)
           _summaryBox(
-            color: Colors.red.shade700,
-            icon: Icons.error_outline,
-            title: 'Overdue  ${_formatAmount(overdueTotal)}  •  ${overdue.length} payment${overdue.length == 1 ? '' : 's'}',
+            tone: AppStatus.danger,
+            icon: LucideIcons.circleAlert,
+            title: 'Overdue  ${Fmt.money(overdueTotal)}  •  ${overdue.length} payment${overdue.length == 1 ? '' : 's'}',
             lines: [
-              for (final m in overdue.take(maxLines)) _SummaryLine('${_shortDate(m.dueOn!)}  ${_scheduleFees(m)}', m.balance),
+              for (final m in overdue.take(maxLines)) _SummaryLine('${Fmt.dayMonth(m.dueOn)}  ${_scheduleFees(m)}', m.balance),
               if (overdue.length > maxLines) _SummaryLine('+ ${overdue.length - maxLines} more, see the months below', null),
             ],
           ),
-        if (overdue.isNotEmpty && upcoming.isNotEmpty) const SizedBox(height: 8),
         if (upcoming.isNotEmpty)
           _summaryBox(
-            color: schoolColor,
-            icon: Icons.event_outlined,
-            title: 'Next due  ${_shortDate(upcoming.first.dueOn!)}',
+            tone: AppStatus.info,
+            icon: LucideIcons.calendarClock,
+            title: 'Next due  ${Fmt.dayMonth(upcoming.first.dueOn)}',
             lines: [
               for (final m in upcoming.where((m) => m.dueOn == upcoming.first.dueOn))
                 _SummaryLine(_scheduleFees(m), m.balance),
@@ -570,256 +556,225 @@ class _BillingInformationV2PageState extends State<BillingInformationV2Page>
   }
 
   Widget _summaryBox({
-    required Color color,
+    required AppStatus tone,
     required IconData icon,
     required String title,
     required List<_SummaryLine> lines,
   }) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        border: Border.all(color: color.withValues(alpha: 0.5), width: 0.8),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 18, color: color),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(title, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: color)),
-              ),
-            ],
-          ),
-          for (final line in lines)
-            Padding(
-              padding: const EdgeInsets.only(top: 4, left: 24),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: Text(line.text, style: const TextStyle(fontSize: 11))),
-                  if (line.amount != null) ...[
-                    const SizedBox(width: 8),
-                    Text(_formatAmount(line.amount!), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
-                  ],
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _monthlyHeaderRow() {
+    final theme = ShadTheme.of(context);
+    final text = theme.textTheme;
+    final accent = tone == AppStatus.danger ? theme.colorScheme.destructive : theme.colorScheme.foreground;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        children: [
-          const SizedBox(width: 22),
-          const Expanded(child: Text('Month', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-          _monthlyHeaderCell('Due'),
-          _monthlyHeaderCell('Paid'),
-          _monthlyHeaderCell('Disc/ Credit'),
-          _monthlyHeaderCell('Balance'),
-        ],
+      padding: const EdgeInsets.only(bottom: Gap.md),
+      child: Container(
+        width: double.infinity,
+        padding: Gap.card,
+        decoration: BoxDecoration(
+          color: tone == AppStatus.danger
+              ? theme.colorScheme.destructive.withValues(alpha: 0.08)
+              : theme.colorScheme.card,
+          border: Border.all(
+            color: tone == AppStatus.danger
+                ? theme.colorScheme.destructive.withValues(alpha: 0.5)
+                : theme.colorScheme.border,
+          ),
+          borderRadius: theme.radius,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, size: IconSize.row, color: accent),
+                Gap.wSm,
+                Expanded(
+                  child: Text(title, style: text.p.copyWith(fontWeight: FontWeight.w600, color: accent)),
+                ),
+              ],
+            ),
+            for (final line in lines)
+              Padding(
+                padding: const EdgeInsets.only(top: Gap.sm, left: IconSize.row + Gap.sm),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: Text(line.text, style: text.small)),
+                    if (line.amount != null) ...[
+                      Gap.wSm,
+                      Text(Fmt.money(line.amount), style: text.small.copyWith(fontWeight: FontWeight.w600)),
+                    ],
+                  ],
+                ),
+              ),
+          ],
+        ),
       ),
-    );
-  }
-
-  Widget _statusChip(String label, Color color) {
-    return Container(
-      margin: const EdgeInsets.only(top: 2),
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        border: Border.all(color: color, width: 0.8),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(label, style: TextStyle(fontSize: 9, color: color, fontWeight: FontWeight.bold)),
     );
   }
 
   Widget _buildMonthGroup(_MonthGroup g, DateTime today) {
+    final theme = ShadTheme.of(context);
+    final text = theme.textTheme;
     final open = _openMonths.contains(g.label);
     final overdue = g.schedules.any((m) => _isOverdue(m, today));
     final paid = g.balance <= 0.004;
-    final chipColor = paid
-        ? Colors.green.shade700
-        : overdue
-            ? Colors.red.shade700
-            : Colors.orange.shade700;
-    final chipLabel = paid
-        ? 'PAID'
-        : overdue
-            ? 'OVERDUE'
-            : 'PENDING';
+    final status = paid ? AppStatus.success : (overdue ? AppStatus.danger : AppStatus.warning);
+    final statusLabel = paid ? 'Paid' : (overdue ? 'Overdue' : 'Pending');
 
-    return Column(
-      children: [
-        InkWell(
-          onTap: () => setState(() {
-            if (!_openMonths.remove(g.label)) _openMonths.add(g.label);
-          }),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 22,
-                  child: Icon(open ? Icons.expand_more : Icons.chevron_right, size: 18, color: Colors.grey.shade600),
-                ),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+    return AppCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            borderRadius: theme.radius,
+            onTap: () => setState(() {
+              if (!_openMonths.remove(g.label)) _openMonths.add(g.label);
+            }),
+            child: Padding(
+              padding: Gap.card,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                     children: [
-                      Text(g.label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
-                      _statusChip(chipLabel, chipColor),
+                      Icon(
+                        open ? LucideIcons.chevronDown : LucideIcons.chevronRight,
+                        size: IconSize.row,
+                        color: theme.colorScheme.mutedForeground,
+                      ),
+                      Gap.wSm,
+                      Expanded(
+                        child: Text(g.label, style: text.p.copyWith(fontWeight: FontWeight.w600)),
+                      ),
+                      StatusBadge(statusLabel, status: status),
                     ],
                   ),
-                ),
-                _monthlyAmountCell(g.due),
-                _monthlyAmountCell(g.paid),
-                _monthlyAmountCell(g.discount, color: g.discount > 0 ? Colors.blue.shade700 : null),
-                _monthlyAmountCell(
-                  g.balance,
-                  bold: true,
-                  color: paid ? Colors.green.shade700 : Colors.red.shade700,
-                ),
-              ],
+                  Gap.hSm,
+                  _figures(due: g.due, paid: g.paid, discount: g.discount, balance: g.balance),
+                ],
+              ),
             ),
           ),
-        ),
-        if (open) ...g.schedules.map((m) => _buildScheduleRow(m, today)),
-        const Divider(height: 1, thickness: 0.3),
-      ],
+          if (open) ...[
+            Divider(height: 1, color: theme.colorScheme.border),
+            for (final m in g.schedules) _buildScheduleRow(m, today),
+          ],
+        ],
+      ),
     );
   }
 
   Widget _buildScheduleRow(V2MonthlyAssessment m, DateTime today) {
+    final theme = ShadTheme.of(context);
+    final text = theme.textTheme;
     final due = m.dueOn;
     final overdue = _isOverdue(m, today);
     return Container(
-      color: Colors.grey.withValues(alpha: 0.06),
-      padding: const EdgeInsets.only(left: 22, top: 6, bottom: 6),
-      // The fee names get the full width on their own line: beside four amount columns they were
-      // squeezed into a few characters and broke mid-word.
+      color: theme.colorScheme.muted.withValues(alpha: 0.4),
+      padding: const EdgeInsets.fromLTRB(Gap.lg + IconSize.row + Gap.sm, Gap.md, Gap.lg, Gap.md),
+      // The fee names get the full width on their own line so they never squeeze into a few
+      // characters beside the amounts.
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text.rich(
-            TextSpan(
-              text: _scheduleFees(m),
-              children: [
-                if (overdue)
-                  TextSpan(text: '  •  overdue', style: TextStyle(color: Colors.red.shade700)),
-              ],
-            ),
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+          Text(_scheduleFees(m), style: text.small.copyWith(fontWeight: FontWeight.w600)),
+          Gap.hXs,
+          Text(
+            due == null ? 'No due date' : 'Due ${Fmt.dayMonth(due)}${overdue ? '  •  overdue' : ''}',
+            style: text.muted.copyWith(color: overdue ? theme.colorScheme.destructive : null),
           ),
-          const SizedBox(height: 2),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  due == null ? 'No due date' : 'Due ${_shortDate(due)}',
-                  style: TextStyle(fontSize: 10, color: overdue ? Colors.red.shade700 : Colors.grey),
-                ),
-              ),
-              _monthlyAmountCell(m.totalDue),
-              _monthlyAmountCell(m.totalPaid),
-              _monthlyAmountCell(m.totalDiscount, color: m.totalDiscount > 0 ? Colors.blue.shade700 : null),
-              _monthlyAmountCell(
-                m.balance,
-                bold: true,
-                color: m.balance > 0.004 ? Colors.red.shade700 : Colors.green.shade700,
-              ),
-            ],
-          ),
+          Gap.hSm,
+          _figures(due: m.totalDue, paid: m.totalPaid, discount: m.totalDiscount, balance: m.balance),
         ],
       ),
     );
   }
 
   Widget _buildPaidSection(List<_MonthGroup> paid, DateTime today) {
+    final theme = ShadTheme.of(context);
+    final text = theme.textTheme;
     final open = _openMonths.contains(_paidSectionKey);
     final first = paid.first.label;
     final last = paid.last.label;
     final range = paid.length == 1 ? first : '$first – $last';
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        InkWell(
-          onTap: () => setState(() {
-            if (!_openMonths.remove(_paidSectionKey)) _openMonths.add(_paidSectionKey);
-          }),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 22,
-                  child: Icon(open ? Icons.expand_more : Icons.chevron_right, size: 18, color: Colors.grey.shade600),
-                ),
-                Icon(Icons.check_circle, size: 16, color: Colors.green.shade700),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    'Fully paid: $range (${paid.length} month${paid.length == 1 ? '' : 's'})',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.green.shade800),
+        AppCard(
+          padding: EdgeInsets.zero,
+          child: InkWell(
+            borderRadius: theme.radius,
+            onTap: () => setState(() {
+              if (!_openMonths.remove(_paidSectionKey)) _openMonths.add(_paidSectionKey);
+            }),
+            child: Padding(
+              padding: Gap.card,
+              child: Row(
+                children: [
+                  Icon(
+                    open ? LucideIcons.chevronDown : LucideIcons.chevronRight,
+                    size: IconSize.row,
+                    color: theme.colorScheme.mutedForeground,
                   ),
-                ),
-              ],
+                  Gap.wSm,
+                  Icon(LucideIcons.circleCheck, size: IconSize.inline, color: theme.colorScheme.mutedForeground),
+                  Gap.wSm,
+                  Expanded(
+                    child: Text(
+                      'Fully paid: $range (${paid.length} month${paid.length == 1 ? '' : 's'})',
+                      style: text.small.copyWith(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
         if (open) ...paid.map((g) => _buildMonthGroup(g, today)),
-        const Divider(height: 1, thickness: 0.3),
       ],
     );
   }
 
-  // The Monthly tab is table-like: four amount columns share the width, so amounts are shown
-  // without the "Php" prefix (the header makes the unit clear) and scale down rather than wrap.
-  static const double _monthlyColWidth = 56;
-
-  Widget _monthlyHeaderCell(String label) {
-    return SizedBox(
-      width: _monthlyColWidth,
-      child: Text(
-        label,
-        textAlign: TextAlign.right,
-        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-      ),
-    );
-  }
-
-  Widget _monthlyAmountCell(double amount, {bool bold = false, Color? color}) {
-    return SizedBox(
-      width: _monthlyColWidth,
-      child: FittedBox(
-        fit: BoxFit.scaleDown,
-        alignment: Alignment.centerRight,
-        child: Text(
-          _formatAmount(amount).replaceFirst('Php ', ''),
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: bold ? FontWeight.w600 : FontWeight.normal,
-            color: color,
-          ),
+  // The four figures of a month or schedule, wrapped so they stack on narrow phones instead of
+  // squeezing into columns: due, paid, discount/credit and balance.
+  Widget _figures({
+    required double due,
+    required double paid,
+    required double discount,
+    required double balance,
+  }) {
+    final theme = ShadTheme.of(context);
+    return Wrap(
+      spacing: Gap.lg,
+      runSpacing: Gap.xs,
+      children: [
+        _labelValue('Due', Fmt.money(due)),
+        _labelValue('Paid', Fmt.money(paid)),
+        _labelValue('Disc/credit', Fmt.money(discount)),
+        _labelValue(
+          'Balance',
+          Fmt.money(balance),
+          bold: true,
+          color: balance > 0.004 ? theme.colorScheme.destructive : null,
         ),
-      ),
+      ],
     );
   }
 
-  Widget _amountChip(String label, double value, Color color) {
+  Widget _labelValue(String label, String value, {bool bold = false, Color? color}) {
+    final text = ShadTheme.of(context).textTheme;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text('$label: ', style: TextStyle(fontSize: 10, color: Colors.grey.shade600)),
-        Text(_formatAmount(value), style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.w600)),
+        Text('$label ', style: text.muted),
+        Text(
+          value,
+          style: text.small.copyWith(
+            fontWeight: bold ? FontWeight.w600 : FontWeight.w500,
+            color: color,
+          ),
+        ),
       ],
     );
   }

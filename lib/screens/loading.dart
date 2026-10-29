@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 import '../models/user.dart';
 import '../schools/api/school_api.dart';
+import '../widgets/ui/ui.dart';
 import 'dart:convert';
 
 class LoadingScreen extends StatefulWidget {
@@ -58,9 +60,41 @@ class _LoadingScreenState extends State<LoadingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = ShadTheme.of(context);
     return Scaffold(
+      backgroundColor: theme.colorScheme.background,
       body: Center(
-        child: CircularProgressIndicator(),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary,
+                borderRadius: theme.radius,
+              ),
+              child: Icon(
+                LucideIcons.graduationCap,
+                size: 32,
+                color: theme.colorScheme.primaryForeground,
+              ),
+            ),
+            Gap.hLg,
+            Text('Essentiel', style: theme.textTheme.h4),
+            Gap.hXs,
+            Text('Student portal', style: theme.textTheme.muted),
+            Gap.hXl,
+            SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.5,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

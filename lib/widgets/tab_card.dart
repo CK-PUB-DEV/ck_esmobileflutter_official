@@ -115,10 +115,13 @@ class TabCardState extends State<TabCard> {
 
   Widget _buildTabContentEnrollment() {
     if (enrolledstud.isEmpty) {
-      return const Center(
+      return Center(
         child: Text(
           "Loading...Please check internet connection",
-          style: TextStyle(fontSize: 15, color: Colors.black),
+          style: TextStyle(
+            fontSize: 15,
+            color: Theme.of(context).colorScheme.onSurface,
+          ),
         ),
       );
     }

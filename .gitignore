@@ -43,3 +43,9 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Generated from tool/test_schools.json for test builds (holds private addresses).
+tool/test_schools.define.json
+
+# Local list of dev school servers (private addresses); each developer keeps their own
+tool/test_schools.json

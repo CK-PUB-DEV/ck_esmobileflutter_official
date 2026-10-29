@@ -1,13 +1,13 @@
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:pushtrial/models/year_sem.dart';
+import 'package:pushtrial/widgets/ui/ui.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pushtrial/api/api.dart';
 import 'package:pushtrial/models/ledger.dart';
 import 'dart:convert';
-import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:pushtrial/models/school_info.dart';
-import 'package:dropdown_button2/dropdown_button2.dart';
 import 'package:pushtrial/models/enrolled_stud.dart';
 import 'package:screen_protector/screen_protector.dart';
 
@@ -79,387 +79,231 @@ class BillingInformationState extends State<BillingInformationPage> {
     }
   }
 
+  // The v1 ledger sends amounts as ready-made strings ("1,200.00", sometimes blank on header
+  // rows). Format real numbers the same way as everywhere else and leave anything else as sent.
+  String _amount(String raw) {
+    final cleaned = raw.replaceAll('Php', '').replaceAll(',', '').trim();
+    if (cleaned.isEmpty) return '';
+    return num.tryParse(cleaned) == null ? raw : Fmt.money(cleaned);
+  }
+
+  String _totalText(String raw) {
+    final formatted = _amount(raw);
+    return formatted.isEmpty ? Fmt.money(0) : formatted;
+  }
+
+  void _showError(String message) {
+    if (!mounted) return;
+    showShadDialog(
+      context: context,
+      builder: (context) => ShadDialog.alert(
+        title: const Text('Error'),
+        description: Text(message),
+        actions: [
+          ShadButton(
+            child: const Text('OK'),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: Text(
-          'BILLING INFORMATION',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: schoolColor,
-          ),
-        ),
-        centerTitle: true,
-      ),
-      body: loading
-          ? const Center(
-              child: CircularProgressIndicator(semanticsLabel: 'Loading...'),
-            )
-          : Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    spacing: 2.0,
-                    children: [
-                      Flexible(
-                        flex: 1,
-                        child: DropdownButtonFormField2<String>(
-                          value: selectedYear.isNotEmpty ? selectedYear : null,
-                          items: schoolYear
-                              .map(
-                                (option) => DropdownMenuItem(
-                                  value: option.id.toString(),
-                                  child: Text(
-                                    option.sydesc,
-                                    style: const TextStyle(fontSize: 10),
-                                  ),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (value) {
-                            setState(() {
-                              selectedYear = value!;
-                              syid = int.parse(selectedYear);
-                            });
-                            if (selectedSem.isNotEmpty) getLedger();
-                          },
-                          decoration: const InputDecoration(
-                            labelText: 'School Year',
-                            labelStyle: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                      ),
-                      // const SizedBox(width: 10.0),
-                     if (levelid == 14 || levelid == 15 || levelid >= 17) 
-                        Flexible(
-                          flex: 1,
-                          child: DropdownButtonFormField2<String>(
-                            value: selectedSem.isNotEmpty ? selectedSem : null,
-                            items: schoolSem
-                                .map(
-                                  (option) => DropdownMenuItem(
-                                    value: option.id.toString(),
-                                    child: Text(
-                                      option.semester,
-                                      style: const TextStyle(fontSize: 10),
-                                    ),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: (value) {
-                              setState(() {
-                                selectedSem = value!;
-                                semid = int.parse(selectedSem);
-                              });
-                              if (selectedYear.isNotEmpty) getLedger();
-                            },
-                            decoration: const InputDecoration(
-                              labelText: 'Semester',
-                              labelStyle: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                              ),
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  Container(
-                    height: 150,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(20),
-                      child: Column(
-                        children: [
-                          Expanded(
-                            flex: 2,
-                            child: Container(
-                              color: const Color.fromARGB(255, 14, 19, 29),
-                              child: Stack(
-                                children: [
-                                  const Positioned(
-                                    top: 16,
-                                    left: 16,
-                                    child: Row(
-                                      children: [
-                                        Icon(
-                                          Icons.credit_card,
-                                          size: 30,
-                                          color: Colors.white,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  Positioned(
-                                    top: 16,
-                                    right: 16,
-                                    child: selectedYear.isNotEmpty && selectedSem.isNotEmpty
-                                        ? Text(
-                                            "SY: ${schoolYear.isNotEmpty ? schoolYear.firstWhere((year) => year.id.toString() == selectedYear, orElse: () => schoolYear.first).sydesc : ''}"
-                                            "${levelid > 13 && schoolSem.isNotEmpty ? "\nSem: ${schoolSem.firstWhere((sem) => sem.id.toString() == selectedSem, orElse: () => schoolSem.first).semester}" : ""}",
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 15,
-                                            ),
-                                          )
-                                        : const SizedBox.shrink(),
-                                  ),
-                                  const Positioned(
-                                    bottom: 16,
-                                    left: 16,
-                                    child: Text(
-                                      "Total Balance",
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 18,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          Expanded(
-                            flex: 1,
-                            child: Container(
-                              color: schoolColor,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16.0,
-                                ),
-                                child: Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      totalBalance,
-                                      style: const TextStyle(
-                                        fontSize: 24,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Card(
-                    color: const Color.fromARGB(255, 14, 19, 29),
-                    child: Padding(
-                      padding: const EdgeInsets.all(15.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Row(
-                            children: [
-                              Icon(Icons.money, color: Colors.white),
-                              SizedBox(width: 6),
-                              Text(
-                                'Payments',
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            totalPayment,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  if (schoolInfo.isNotEmpty &&
-                      schoolInfo[0].abbreviation.toUpperCase() == 'SBC') ...[
-                    const SizedBox(height: 8),
-                    const Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(Icons.info_outline, size: 12, color: Colors.grey),
-                        SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            'Non-tuition / walk-in cash payments may not be reflected in the total.',
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: Colors.grey,
-                              fontStyle: FontStyle.italic,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  // Header row
-                  const Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'Particulars',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ),
-                      SizedBox(
-                        width: 76,
-                        child: Text(
-                          'Amount',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 11,
-                          ),
-                          textAlign: TextAlign.right,
-                        ),
-                      ),
-                      SizedBox(width: 8),
-                      SizedBox(
-                        width: 76,
-                        child: Text(
-                          'Payments',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 11,
-                          ),
-                          textAlign: TextAlign.right,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const Divider(thickness: 0.5),
-                  Expanded(
-                    child: ListView.separated(
-                      itemCount: data.length,
-                      separatorBuilder: (_, __) =>
-                          const Divider(thickness: 0.3, height: 1),
-                      itemBuilder: (context, index) {
-                        final ledger = data[index];
-                        final isTotal =
-                            ledger.particulars.startsWith('TOTAL:');
-                        final textColor = ledger.isVoided
-                            ? Colors.grey
-                            : Colors.black;
-                        final textDecoration = ledger.isVoided
-                            ? TextDecoration.lineThrough
-                            : TextDecoration.none;
-                        return Padding(
-                          padding:
-                              const EdgeInsets.symmetric(vertical: 6.0),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      ledger.particulars,
-                                      style: TextStyle(
-                                        color: textColor,
-                                        fontSize: 11,
-                                        fontWeight: isTotal
-                                            ? FontWeight.bold
-                                            : FontWeight.normal,
-                                        decoration: textDecoration,
-                                        decorationColor: Colors.grey,
-                                      ),
-                                    ),
-                                    if (ledger.isVoided)
-                                      Container(
-                                        margin: const EdgeInsets.only(top: 2),
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 5, vertical: 1),
-                                        decoration: BoxDecoration(
-                                          color: Colors.red.shade100,
-                                          border: Border.all(
-                                              color: Colors.red, width: 0.8),
-                                          borderRadius:
-                                              BorderRadius.circular(3),
-                                        ),
-                                        child: const Text(
-                                          'VOID',
-                                          style: TextStyle(
-                                            color: Colors.red,
-                                            fontSize: 9,
-                                            fontWeight: FontWeight.bold,
-                                            letterSpacing: 0.5,
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                              SizedBox(
-                                width: 76,
-                                child: Text(
-                                  ledger.amount,
-                                  style: TextStyle(
-                                    color: textColor,
-                                    fontSize: 11,
-                                    fontWeight: isTotal
-                                        ? FontWeight.bold
-                                        : FontWeight.normal,
-                                    decoration: textDecoration,
-                                    decorationColor: Colors.grey,
-                                  ),
-                                  textAlign: TextAlign.right,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              SizedBox(
-                                width: 76,
-                                child: Text(
-                                  ledger.payment,
-                                  style: TextStyle(
-                                    color: textColor,
-                                    fontSize: 11,
-                                    fontWeight: isTotal
-                                        ? FontWeight.bold
-                                        : FontWeight.normal,
-                                    decoration: textDecoration,
-                                    decorationColor: Colors.grey,
-                                  ),
-                                  textAlign: TextAlign.right,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                  ),
+    if (loading) {
+      return const AppPage(title: 'Billing information', body: LoadingSkeleton());
+    }
+    final theme = ShadTheme.of(context);
+    final text = theme.textTheme;
+    final showSem = levelid == 14 || levelid == 15 || levelid >= 17;
+
+    return AppPage(
+      title: 'Billing information',
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: ShadSelect<String>(
+                placeholder: const Text('School year'),
+                initialValue: selectedYear.isNotEmpty ? selectedYear : null,
+                options: [
+                  for (final option in schoolYear)
+                    ShadOption(value: option.id.toString(), child: Text(option.sydesc)),
                 ],
+                selectedOptionBuilder: (context, value) => Text(
+                  schoolYear
+                      .firstWhere((y) => y.id.toString() == value, orElse: () => schoolYear.first)
+                      .sydesc,
+                ),
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() {
+                    selectedYear = value;
+                    syid = int.parse(selectedYear);
+                  });
+                  if (selectedSem.isNotEmpty) getLedger();
+                },
               ),
             ),
+            if (showSem) ...[
+              Gap.wSm,
+              Expanded(
+                child: ShadSelect<String>(
+                  placeholder: const Text('Semester'),
+                  initialValue: selectedSem.isNotEmpty ? selectedSem : null,
+                  options: [
+                    for (final option in schoolSem)
+                      ShadOption(value: option.id.toString(), child: Text(option.semester)),
+                  ],
+                  selectedOptionBuilder: (context, value) => Text(
+                    schoolSem
+                        .firstWhere((s) => s.id.toString() == value, orElse: () => schoolSem.first)
+                        .semester,
+                  ),
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() {
+                      selectedSem = value;
+                      semid = int.parse(selectedSem);
+                    });
+                    if (selectedYear.isNotEmpty) getLedger();
+                  },
+                ),
+              ),
+            ],
+          ],
+        ),
+        Gap.hLg,
+        AppCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: StatTile(
+                      label: 'Total balance',
+                      value: _totalText(totalBalance),
+                      icon: LucideIcons.wallet,
+                    ),
+                  ),
+                  if (selectedYear.isNotEmpty && selectedSem.isNotEmpty)
+                    Flexible(
+                      child: Text(
+                        "SY: ${schoolYear.isNotEmpty ? schoolYear.firstWhere((year) => year.id.toString() == selectedYear, orElse: () => schoolYear.first).sydesc : ''}"
+                        "${levelid > 13 && schoolSem.isNotEmpty ? "\nSem: ${schoolSem.firstWhere((sem) => sem.id.toString() == selectedSem, orElse: () => schoolSem.first).semester}" : ""}",
+                        textAlign: TextAlign.end,
+                        style: text.muted,
+                      ),
+                    ),
+                ],
+              ),
+              Gap.hLg,
+              Divider(height: 1, color: theme.colorScheme.border),
+              Gap.hLg,
+              StatTile(
+                label: 'Payments',
+                value: _totalText(totalPayment),
+                icon: LucideIcons.banknote,
+              ),
+            ],
+          ),
+        ),
+        if (schoolInfo.isNotEmpty && schoolInfo[0].abbreviation.toUpperCase() == 'SBC')
+          Padding(
+            padding: const EdgeInsets.only(bottom: Gap.md),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(LucideIcons.info, size: IconSize.inline, color: theme.colorScheme.mutedForeground),
+                Gap.wSm,
+                Expanded(
+                  child: Text(
+                    'Non-tuition / walk-in cash payments may not be reflected in the total.',
+                    style: text.muted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        const SectionHeader('Particulars'),
+        if (data.isEmpty)
+          const EmptyState(title: 'No billing records', message: 'Nothing to show for this school year.')
+        else
+          AppCard(
+            padding: EdgeInsets.zero,
+            child: Column(
+              children: [
+                for (var i = 0; i < data.length; i++) ...[
+                  if (i > 0) Divider(height: 1, color: theme.colorScheme.border),
+                  _buildLedgerRow(data[i]),
+                ],
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildLedgerRow(Ledger ledger) {
+    final theme = ShadTheme.of(context);
+    final text = theme.textTheme;
+    final isTotal = ledger.particulars.startsWith('TOTAL:');
+    final color = ledger.isVoided ? theme.colorScheme.mutedForeground : theme.colorScheme.foreground;
+    final decoration = ledger.isVoided ? TextDecoration.lineThrough : TextDecoration.none;
+    final weight = isTotal ? FontWeight.w600 : FontWeight.w400;
+    final amount = _amount(ledger.amount);
+    final payment = _amount(ledger.payment);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: Gap.lg, vertical: Gap.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  ledger.particulars,
+                  style: text.small.copyWith(color: color, fontWeight: weight, decoration: decoration),
+                ),
+              ),
+              if (ledger.isVoided) ...[
+                Gap.wSm,
+                const StatusBadge('Void', status: AppStatus.danger),
+              ],
+            ],
+          ),
+          if (amount.isNotEmpty || payment.isNotEmpty) ...[
+            Gap.hXs,
+            Wrap(
+              spacing: Gap.lg,
+              runSpacing: Gap.xs,
+              children: [
+                if (amount.isNotEmpty) _labelValue('Amount', amount, color, weight, decoration),
+                if (payment.isNotEmpty) _labelValue('Payments', payment, color, weight, decoration),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _labelValue(String label, String value, Color color, FontWeight weight, TextDecoration decoration) {
+    final text = ShadTheme.of(context).textTheme;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('$label ', style: text.muted),
+        Text(
+          value,
+          style: text.small.copyWith(color: color, fontWeight: weight, decoration: decoration),
+        ),
+      ],
     );
   }
 
@@ -544,39 +388,20 @@ class BillingInformationState extends State<BillingInformationPage> {
   Future<void> getLedger() async {
     try {
       final response = await CallApi().getStudLedger(id, syid, semid);
-      
+
       // Check if the response status is successful
       if (response.statusCode != 200) {
         print('Error: API returned status ${response.statusCode}');
         setState(() {
           loading = false;
         });
-        
-        // Show error dialog
-        if (mounted) {
-          showDialog(
-            context: context,
-            builder: (BuildContext context) {
-              return AlertDialog(
-                title: const Text('Error'),
-                content: Text(
-                  'Failed to load billing information. The server returned an error (Status: ${response.statusCode}). Please try again later or contact support.',
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                    },
-                    child: const Text('OK'),
-                  ),
-                ],
-              );
-            },
-          );
-        }
+
+        _showError(
+          'Failed to load billing information. The server returned an error (Status: ${response.statusCode}). Please try again later or contact support.',
+        );
         return;
       }
-      
+
       setState(() {
         Iterable list = json.decode(response.body);
         data = list.map((model) => Ledger.fromJson(model)).toList();
@@ -607,29 +432,11 @@ class BillingInformationState extends State<BillingInformationPage> {
       setState(() {
         loading = false;
       });
-      
+
       // Show error dialog for any exception
-      if (mounted) {
-        showDialog(
-          context: context,
-          builder: (BuildContext context) {
-            return AlertDialog(
-              title: const Text('Error'),
-              content: Text(
-                'An error occurred while loading billing information: ${e.toString()}. Please check your internet connection and try again.',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                  },
-                  child: const Text('OK'),
-                ),
-              ],
-            );
-          },
-        );
-      }
+      _showError(
+        'An error occurred while loading billing information: ${e.toString()}. Please check your internet connection and try again.',
+      );
     }
   }
 }

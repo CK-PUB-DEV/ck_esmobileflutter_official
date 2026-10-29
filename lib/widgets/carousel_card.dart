@@ -1,13 +1,14 @@
+import 'package:pushtrial/api/api_version.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:carousel_slider/carousel_slider.dart';
 import 'package:pushtrial/api/api.dart';
 import 'package:pushtrial/models/enrolled_stud.dart';
 import 'package:pushtrial/models/ledger.dart';
-import 'package:pushtrial/models/school_info.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:pushtrial/models/user.dart';
 import 'package:pushtrial/models/user_data.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:pushtrial/widgets/ui/ui.dart';
 
 class CarouselCard extends StatefulWidget {
   const CarouselCard({super.key});
@@ -23,18 +24,14 @@ class _CarouselCardState extends State<CarouselCard> {
   int semid = 0;
   String syDesc = '';
   String sem = '';
-  String totalBalance = '₱ 0.00';
+  String totalBalance = 'PHP 0.00';
   // Shown instead of a misleading "₱ 0.00" while the balance loads or when it can't be loaded.
   bool _balanceLoading = true;
   String? _balanceError;
 
   List<Ledger> data = [];
   List<EnrolledStud> enrolledstud = [];
-  List<SchoolInfo> schoolInfo = [];
   User user = UserData.myUser;
-  // Dark until the school colour arrives: the card's text and spinner are white, so a white
-  // default made the card look blank while loading.
-  Color schoolColor = const Color(0xFF1D1D1D);
 
   @override
   void initState() {
@@ -47,15 +44,11 @@ class _CarouselCardState extends State<CarouselCard> {
   Future<void> _initializeData() async {
     await getUser();
 
-    // School colour and enrollment don't depend on each other, so fetch them together;
-    // the ledger needs syid/semid from enrollment and runs after.
-    await Future.wait([
-      _guard('school info', getSchoolInfo),
-      _guard('enrollment', getEnrolledStud),
-    ]);
+    // The ledger needs the selected school year from enrollment.
+    await _guard('enrollment', getEnrolledStud);
 
     final prefs = await SharedPreferences.getInstance();
-    _schoolVersion = prefs.getString('schoolVersion') ?? 'v1';
+    _schoolVersion = await ApiVersion.billingVersion();
 
     if (_schoolVersion == 'v2') {
       await getLedgerV2();
@@ -99,7 +92,8 @@ class _CarouselCardState extends State<CarouselCard> {
   String _serverMessage(String body) {
     try {
       final decoded = json.decode(body);
-      if (decoded is Map && decoded['message'] is String) return decoded['message'];
+      if (decoded is Map && decoded['message'] is String)
+        return decoded['message'];
     } catch (_) {}
     return 'Balance is unavailable right now.';
   }
@@ -112,17 +106,6 @@ class _CarouselCardState extends State<CarouselCard> {
         user = User.fromJson(jsonDecode(jsonStr));
         sid = user.sid;
         id = user.id.toString();
-      });
-    }
-  }
-
-  Future<void> getSchoolInfo() async {
-    final response = await CallApi().getSchoolInfo();
-    final parsed = json.decode(response.body);
-    if (parsed is List && mounted) {
-      setState(() {
-        schoolInfo = parsed.map((e) => SchoolInfo.fromJson(e)).toList();
-        schoolColor = hexToColor(schoolInfo[0].schoolcolor);
       });
     }
   }
@@ -146,7 +129,9 @@ class _CarouselCardState extends State<CarouselCard> {
             sem = latestInfo.semester;
           });
         }
-        print('EnrolledStud - id: $id, syid: $syid, semid: $semid, syDesc: $syDesc');
+        print(
+          'EnrolledStud - id: $id, syid: $syid, semid: $semid, syDesc: $syDesc',
+        );
       }
     }
   }
@@ -170,7 +155,7 @@ class _CarouselCardState extends State<CarouselCard> {
       for (final fee in fees) {
         total += (fee['total_balance'] ?? 0).toDouble();
       }
-      _setBalance('₱ ${total.toStringAsFixed(2)}');
+      _setBalance('PHP ${total.toStringAsFixed(2)}');
     } catch (e) {
       print('V2 ledger error: $e');
       _setBalanceError('Could not load balance. Check your connection.');
@@ -183,7 +168,9 @@ class _CarouselCardState extends State<CarouselCard> {
     final dynamic response;
     try {
       response = await CallApi()
-          .getStudLedger(id, syid, semid)
+          // Basic-ed enrollments carry semid 0, which the v1 ledger reads as "no rows";
+          // the Billing page defaults to semester 1, so do the same here.
+          .getStudLedger(id, syid, semid == 0 ? 1 : semid)
           .timeout(const Duration(seconds: 60));
     } catch (e) {
       print('Ledger error: $e');
@@ -203,14 +190,16 @@ class _CarouselCardState extends State<CarouselCard> {
 
     final list = json.decode(response.body);
     print('Decoded JSON: $list');
-    
+
     data = (list as List).map((e) => Ledger.fromJson(e)).toList();
     print('Parsed data: $data');
     print('Data length: ${data.length}');
 
     // Debug: Print each entry's particulars field to see exact content
     for (int i = 0; i < data.length; i++) {
-      print('Entry $i: particulars="${data[i].particulars}", balance="${data[i].balance}"');
+      print(
+        'Entry $i: particulars="${data[i].particulars}", balance="${data[i].balance}"',
+      );
     }
 
     final total = data.firstWhere(
@@ -230,23 +219,11 @@ class _CarouselCardState extends State<CarouselCard> {
       },
     );
 
-    print('Final Total found: particulars="${total.particulars}", balance="${total.balance}"');
+    print(
+      'Final Total found: particulars="${total.particulars}", balance="${total.balance}"',
+    );
 
-    _setBalance('₱ ${total.balance}');
-  }
-
-  Color hexToColor(String hexString) {
-    final buffer = StringBuffer();
-    if (hexString.length == 7 || hexString.length == 9) buffer.write('ff');
-    buffer.write(hexString.replaceFirst('#', ''));
-    return Color(int.parse(buffer.toString(), radix: 16));
-  }
-
-  Color darkenColor(Color color, [double amount = 0.15]) {
-    final hsl = HSLColor.fromColor(color);
-    return hsl
-        .withLightness((hsl.lightness - amount).clamp(0.0, 1.0))
-        .toColor();
+    _setBalance('PHP ${total.balance}');
   }
 
   @override
@@ -272,164 +249,94 @@ class _CarouselCardState extends State<CarouselCard> {
         sydesc: '',
       ),
     );
-
-    final courseText = latestInfo.courseDesc.isNotEmpty
+    final theme = ShadTheme.of(context);
+    final text = theme.textTheme;
+    final scheme = theme.colorScheme;
+    final sidText = sid?.isNotEmpty == true ? sid! : 'Student ID unavailable';
+    final program = latestInfo.courseDesc.isNotEmpty
         ? latestInfo.courseDesc
-        : '';
-    final strandText = latestInfo.strandname.isNotEmpty
-        ? latestInfo.strandname
-        : '';
-    final sectionText = latestInfo.sectionname;
-    final levelName = latestInfo.levelname;
-    final sidText = sid ?? 'No SID';
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 0.0),
-      child: CarouselSlider(
-        options: CarouselOptions(
-          height: 175,
-          autoPlay: true,
-          autoPlayInterval: const Duration(seconds: 5),
-          autoPlayAnimationDuration: const Duration(milliseconds: 800),
-          enlargeCenterPage: true,
-          aspectRatio: 16 / 9,
-          viewportFraction: 0.8,
+        : latestInfo.strandname;
+    final balanceText = _balanceError ??
+        Fmt.money(totalBalance.replaceFirst('PHP', '').trim());
+    return Column(
+      children: [
+        AppCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    LucideIcons.wallet,
+                    color: scheme.primary,
+                    size: IconSize.row,
+                  ),
+                  Gap.wSm,
+                  Text('Current balance', style: text.muted),
+                ],
+              ),
+              Gap.hMd,
+              if (_balanceLoading)
+                const SkeletonBox(height: 32, width: 140)
+              else
+                Text(
+                  balanceText,
+                  style: _balanceError == null
+                      ? text.h2.copyWith(color: scheme.foreground)
+                      : text.muted,
+                ),
+              if (syDesc.isNotEmpty) ...[
+                Gap.hSm,
+                Text(
+                  'SY $syDesc${sem.isNotEmpty ? ' · $sem' : ''}',
+                  style: text.small.copyWith(color: scheme.mutedForeground),
+                ),
+              ],
+            ],
+          ),
         ),
-        items: [
-          // Balance Card
-          Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20.0),
-              gradient: LinearGradient(
-                colors: [darkenColor(schoolColor), schoolColor],
-                begin: Alignment.centerRight,
-                end: Alignment.centerLeft,
-              ),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        AppCard(
+          margin: EdgeInsets.zero,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 children: [
-                  const Text(
-                    'Current Balance',
-                    style: TextStyle(color: Colors.white, fontSize: 12.0),
+                  Icon(
+                    LucideIcons.school,
+                    color: scheme.primary,
+                    size: IconSize.row,
                   ),
-                  if (_balanceLoading)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 10),
-                      child: SizedBox(
-                        width: 26,
-                        height: 26,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2.5,
-                        ),
-                      ),
-                    )
-                  else if (_balanceError != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Text(
-                        _balanceError!,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                        ),
-                      ),
-                    )
-                  else
-                    Text(
-                      totalBalance,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 30,
-                      ),
-                    ),
-                  const Spacer(),
-                  Align(
-                    alignment: Alignment.bottomRight,
-                    child: Text(
-                      "SY: $syDesc${sem.isNotEmpty ? "\nSem: $sem" : ""}",
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14.0,
-                      ),
-                    ),
-                  ),
+                  Gap.wSm,
+                  Text('Enrollment', style: text.muted),
                 ],
               ),
-            ),
+              Gap.hMd,
+              Text(sidText, style: text.h4),
+              if (latestInfo.levelname.isNotEmpty) ...[
+                Gap.hXs,
+                Text(latestInfo.levelname, style: text.small.copyWith(height: 1.5)),
+              ],
+              if (program.isNotEmpty)
+                Text(
+                  program,
+                  style: text.small.copyWith(
+                    color: scheme.mutedForeground,
+                    height: 1.5,
+                  ),
+                ),
+              if (latestInfo.sectionname.isNotEmpty)
+                Text(
+                  latestInfo.sectionname,
+                  style: text.small.copyWith(
+                    color: scheme.mutedForeground,
+                    height: 1.5,
+                  ),
+                ),
+            ],
           ),
-
-          // Enrollment Info Card
-          Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20.0),
-              gradient: LinearGradient(
-                colors: [darkenColor(schoolColor), schoolColor],
-                begin: Alignment.centerRight,
-                end: Alignment.centerLeft,
-              ),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.only(
-                left: 20.0,
-                top: 20.0,
-                right: 20.0,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: const [
-                      Expanded(
-                        child: Text(
-                          'Enrollment Information',
-                          style: TextStyle(color: Colors.white, fontSize: 12.0),
-                        ),
-                      ),
-                      Icon(Icons.person, color: Colors.white),
-                    ],
-                  ),
-                  Text(
-                    sidText,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 22.0,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  if (levelName.isNotEmpty)
-                    Text(
-                      levelName,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12.0,
-                      ),
-                    ),
-                  if (courseText.isNotEmpty || strandText.isNotEmpty)
-                    Text(
-                      courseText.isNotEmpty ? courseText : strandText,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12.0,
-                      ),
-                    ),
-
-                  Text(
-                    sectionText,
-                    style: const TextStyle(color: Colors.white, fontSize: 12.0),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

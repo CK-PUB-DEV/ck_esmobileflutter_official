@@ -1,351 +1,256 @@
-import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:pushtrial/api/api.dart';
 import 'dart:convert';
-import 'package:pushtrial/models/smsbunker.dart';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_swipe_action_cell/flutter_swipe_action_cell.dart';
+import 'package:pushtrial/services/messages_repository.dart';
 import 'package:pushtrial/models/login.dart';
-import 'package:pushtrial/models/user_login.dart';
+import 'package:pushtrial/models/school_message.dart';
 import 'package:pushtrial/models/user.dart';
 import 'package:pushtrial/models/user_data.dart';
-import 'package:flutter_swipe_action_cell/flutter_swipe_action_cell.dart';
-import 'package:loading_animation_widget/loading_animation_widget.dart';
-import 'package:pushtrial/models/school_info.dart';
-import 'home.dart';
-import 'dashboard.dart';
+import 'package:pushtrial/models/user_login.dart';
+import 'package:pushtrial/services/message_read_store.dart';
+import 'package:pushtrial/widgets/ui/ui.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+/// What the school sent this person: SMS, tap texts and text blasts to their phone number, and
+/// announcements sent to the student.
+///
+/// Everything from the last 30 days is listed, whether or not the old push job flagged it.
+/// Items under 24 hours old are "New" (and were also popped up as alerts while they were
+/// valid); older ones are history. Read state is kept on the phone only.
 class NotificationsScreen extends StatefulWidget {
-  // final VoidCallback onNotificationsViewed;
-
-  // NotificationsScreen({required this.onNotificationsViewed});
+  const NotificationsScreen({super.key});
 
   @override
-  _NotificationsScreenState createState() => _NotificationsScreenState();
+  State<NotificationsScreen> createState() => _NotificationsScreenState();
 }
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
+  // Slow responses can finish after the screen was closed; skip the update then.
+  @override
+  void setState(VoidCallback fn) {
+    if (mounted) super.setState(fn);
+  }
+
   User user = UserData.myUser;
   Login userLogin = UserDataLogin.myUserLogin;
   int studid = 0;
-  int type = 0;
-  List<SMS> sms = [];
+  List<SchoolMessage> messages = [];
   bool loading = true;
-
-  List<SchoolInfo> schoolInfo = [];
-  Color schoolColor = const Color.fromARGB(0, 255, 255, 255);
-
-  Color hexToColor(String hexString) {
-    final buffer = StringBuffer();
-    if (hexString.length == 7 || hexString.length == 9) buffer.write('ff');
-    buffer.write(hexString.replaceFirst('#', ''));
-    return Color(int.parse(buffer.toString(), radix: 16));
-  }
-
-  Future<void> getSchoolInfo() async {
-    final response = await CallApi().getSchoolInfo();
-
-    final parsedResponse = json.decode(response.body);
-    if (parsedResponse is List) {
-      setState(() {
-        schoolInfo = parsedResponse
-            .map((model) => SchoolInfo.fromJson(model))
-            .toList()
-            .cast<SchoolInfo>();
-
-        schoolColor = hexToColor(schoolInfo[0].schoolcolor);
-      });
-    }
-  }
+  bool failed = false;
 
   @override
   void initState() {
-    getSchoolInfo();
     super.initState();
-    _initializeData();
+    _load();
   }
 
-  Future<void> _initializeData() async {
-    await getUser();
-    await getLogin();
-    await getSMSBunker();
+  Future<void> _load() async {
+    final preferences = await SharedPreferences.getInstance();
+    final userJson = preferences.getString('user');
+    final loginJson = preferences.getString('userlogin');
+    user = userJson == null ? UserData.myUser : User.fromJson(jsonDecode(userJson));
+    userLogin = loginJson == null
+        ? UserDataLogin.myUserLogin
+        : Login.fromJson(jsonDecode(loginJson));
+    studid = user.id;
 
+    // From the school's server, whatever version it runs (see MessagesRepository).
+    final fetched = await MessagesRepository.load(studid, userLogin.type);
+    final ok = fetched != null;
+    final loaded = fetched ?? messages;
+
+    loaded.sort((a, b) {
+      final x = a.createdAt, y = b.createdAt;
+      if (x == null || y == null) return 0;
+      return y.compareTo(x);
+    });
+    await MessageReadStore.apply(loaded, studid);
     setState(() {
+      messages = loaded;
+      failed = !ok && loaded.isEmpty;
       loading = false;
     });
   }
 
-  Future<void> getUser() async {
-    SharedPreferences preferences = await SharedPreferences.getInstance();
-    final json = preferences.getString('user');
-    user = json == null ? UserData.myUser : User.fromJson(jsonDecode(json));
-
-    setState(() {
-      studid = user.id;
-    });
+  /// Read state is kept on this phone only. Nothing is written to the school's server.
+  Future<void> _markRead(SchoolMessage message) async {
+    await MessageReadStore.markRead([message], studid);
+    setState(() {});
   }
 
-  Future<void> getLogin() async {
-    SharedPreferences preferences = await SharedPreferences.getInstance();
-    final json = preferences.getString('userlogin');
-    userLogin = json == null
-        ? UserDataLogin.myUserLogin
-        : Login.fromJson(jsonDecode(json));
-    // print('User login data in notifications: $userLogin');
-
-    type = userLogin.type;
-  }
-
-  Future<void> getSMSBunker() async {
-    final response = await CallApi().getSmsBunker(studid);
-
-    if (response.statusCode == 200) {
-      if (response.body.isEmpty) {
-        print('No data returned');
-        return;
-      }
-
-      Map<String, dynamic> data = json.decode(response.body);
-
-      setState(() {
-        if (userLogin.type == 7) {
-          final smsbunkerStudent = (data['smsbunkerstudent'] as List)
-              .map((model) => SMS.fromJson(model))
-              .toList();
-
-          final smsbunkertextblastStudent =
-              (data['smsbunkertextblaststudent'] as List)
-                  .map((model) => SMS.fromJson(model))
-                  .toList();
-
-          sms = [...smsbunkerStudent, ...smsbunkertextblastStudent];
-        } else if (userLogin.type == 9) {
-          final smsbunkerParents = (data['smsbunkerparents'] as List)
-              .map((model) => SMS.fromJson(model))
-              .toList();
-          final tapbunkerParents = (data['tapbunkerparents'] as List)
-              .map((model) => SMS.fromJson(model))
-              .toList();
-
-          final smsbunkertextblastParents =
-              (data['smsbunkertextblastsparents'] as List)
-                  .map((model) => SMS.fromJson(model))
-                  .toList();
-
-          sms = [
-            ...smsbunkerParents,
-            ...tapbunkerParents,
-            ...smsbunkertextblastParents,
-          ];
-        }
-      });
-
-      print('Retrieved smsbunker for notifications: $sms');
+  /// Looking at the page counts as reading what it showed: remember those as read on leaving, so
+  /// "New" and the Home bell clear. (They still read as unread while the page is open.)
+  @override
+  void dispose() {
+    if (studid != 0 && messages.any((m) => !m.read)) {
+      MessageReadStore.markRead(messages, studid);
     }
+    super.dispose();
   }
 
-  Future<void> updateNotificationPushStatus(id, studid, newStatus) async {
-    final response = await CallApi().getUpdatePushStatus(id, studid, newStatus);
+  Widget _card(SchoolMessage message) {
+    final theme = ShadTheme.of(context);
+    final text = theme.textTheme;
+    final unread = message.isUnread;
+    final created = message.createdAt;
+    final when = created == null ? '' : '${Fmt.date(created)} · ${Fmt.time(created)}';
 
-    if (response.statusCode == 200) {
-      print('Notification push status updated successfully.');
-    } else {
-      print(
-        'Failed to update notification push status. Status code: ${response.statusCode}',
-      );
-    }
+    return AppCard(
+      margin: const EdgeInsets.only(bottom: Gap.md),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            unread ? LucideIcons.bellRing : LucideIcons.bell,
+            size: IconSize.row,
+            color: unread ? theme.colorScheme.primary : theme.colorScheme.mutedForeground,
+          ),
+          Gap.wMd,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (message.title.isNotEmpty) ...[
+                  Text(
+                    message.title,
+                    style: text.p.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: unread ? null : theme.colorScheme.mutedForeground,
+                    ),
+                  ),
+                  Gap.hXs,
+                ],
+                Text(
+                  message.message,
+                  style: unread
+                      ? text.p
+                      : text.p.copyWith(color: theme.colorScheme.mutedForeground),
+                ),
+                if (when.isNotEmpty) ...[
+                  Gap.hSm,
+                  Text(when, style: text.muted),
+                ],
+              ],
+            ),
+          ),
+          Gap.wSm,
+          if (message.isRead)
+            Icon(
+              LucideIcons.circleCheck,
+              size: IconSize.inline,
+              color: theme.colorScheme.mutedForeground,
+            )
+          else if (unread)
+            Container(
+              width: 8,
+              height: 8,
+              margin: const EdgeInsets.only(top: Gap.xs + 2),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary,
+                shape: BoxShape.circle,
+              ),
+            ),
+        ],
+      ),
+    );
   }
 
-  // Future<void> _showFCMTokenDialog() async {
-  //   String? token = await PushNotifications.getFCMToken();
-
-  //   showDialog(
-  //     context: context,
-  //     builder: (BuildContext context) {
-  //       return AlertDialog(
-  //         title: Text('FCM Token'),
-  //         content: Text(token ?? 'Failed to retrieve FCM token'),
-  //         actions: [
-  //           TextButton(
-  //             onPressed: () {
-  //               Navigator.of(context).pop();
-  //             },
-  //             child: Text('OK'),
-  //           ),
-  //         ],
-  //       );
-  //     },
-  //   );
-  // }
+  Widget _swipeable(SchoolMessage message) {
+    final theme = ShadTheme.of(context);
+    return SwipeActionCell(
+      key: ValueKey(message.key),
+      trailingActions: message.isUnread
+          ? [
+              SwipeAction(
+                content: Container(
+                  alignment: Alignment.center,
+                  margin: const EdgeInsets.only(bottom: Gap.md),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary,
+                    borderRadius: theme.radius,
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: Gap.md),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        LucideIcons.check,
+                        size: IconSize.row,
+                        color: theme.colorScheme.primaryForeground,
+                      ),
+                      Gap.hXs,
+                      Text(
+                        'Mark as read',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.small.copyWith(
+                          color: theme.colorScheme.primaryForeground,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                onTap: (CompletionHandler handler) async {
+                  await handler(true);
+                  await _markRead(message);
+                },
+                color: Colors.transparent,
+              ),
+            ]
+          : [],
+      child: _card(message),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    List<SMS> filteredData = sms
-        .where((item) => item.pushstatus == 1 || item.pushstatus == 2)
-        .toList();
+    if (loading) {
+      return const AppPage(title: 'Notifications', body: LoadingSkeleton());
+    }
 
-    final dateFormat = DateFormat('MMMM d, yyyy h:mm a');
-
-    filteredData.sort((a, b) {
-      int statusComparison = a.pushstatus.compareTo(b.pushstatus);
-      if (statusComparison == 0) {
-        return b.createddatetime.compareTo(a.createddatetime);
-      }
-      return statusComparison;
-    });
-
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: Text(
-          'NOTIFICATIONS',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: schoolColor,
-          ),
-        ),
-        leading: BackButton(
-          onPressed: () {
-            Navigator.pop(context);
-          },
-        ),
-        centerTitle: true,
-      ),
-      body: loading
-          ? const Center(
-              child: CircularProgressIndicator(semanticsLabel: 'Loading...'),
-            )
-          : Padding(
-              padding: const EdgeInsets.only(right: 20, left: 20, bottom: 20),
-              child: filteredData.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Image.asset(
-                            'assets/bell.png',
-                            height: 200,
-                            width: 200,
-                          ),
-                          const Text(
-                            'No notifications available',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.grey,
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  : ListView.builder(
-                      itemCount: filteredData.length,
-                      itemBuilder: (context, index) {
-                        final notification = filteredData[index];
-                        bool isReadStatus = notification.pushstatus == 2;
-
-                        final formattedDate = dateFormat.format(
-                          DateTime.parse(notification.createddatetime),
-                        );
-
-                        return SwipeActionCell(
-                          key: ValueKey(notification.id),
-                          trailingActions: isReadStatus
-                              ? []
-                              : [
-                                  SwipeAction(
-                                    content: Container(
-                                      alignment: Alignment.center,
-                                      decoration: BoxDecoration(
-                                        color: const Color.fromARGB(
-                                          255,
-                                          65,
-                                          187,
-                                          54,
-                                        ).withOpacity(0.75),
-                                        borderRadius: BorderRadius.circular(
-                                          8.0,
-                                        ),
-                                      ),
-                                      padding: EdgeInsets.zero,
-                                      margin: EdgeInsets.zero,
-                                      height: 100.0,
-                                      child: const Text(
-                                        "Mark as Read",
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.white,
-                                        ),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                    ),
-                                    onTap: (CompletionHandler handler) async {
-                                      await handler(true);
-                                      await updateNotificationPushStatus(
-                                        notification.id,
-                                        studid,
-                                        2,
-                                      );
-                                      setState(() {
-                                        sms.sort((a, b) {
-                                          int statusComparison = a.pushstatus
-                                              .compareTo(b.pushstatus);
-                                          if (statusComparison == 0) {
-                                            return b.createddatetime.compareTo(
-                                              a.createddatetime,
-                                            );
-                                          }
-                                          return statusComparison;
-                                        });
-                                      });
-                                    },
-                                    color: Colors.transparent,
-                                  ),
-                                ],
-                          child: Card(
-                            color: isReadStatus ? Colors.white : Colors.white,
-                            margin: const EdgeInsets.all(7.0),
-                            elevation: 3,
-                            child: Padding(
-                              padding: const EdgeInsets.all(8.0),
-                              child: ListTile(
-                                title: Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        formattedDate,
-                                        style: const TextStyle(
-                                          color: Colors.grey,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                    if (isReadStatus)
-                                      const Icon(
-                                        Icons.check_circle,
-                                        color: Colors.green,
-                                        size: 20,
-                                      ),
-                                  ],
-                                ),
-                                subtitle: Text(
-                                  notification.message,
-                                  style: const TextStyle(
-                                    color: Color.fromARGB(255, 13, 4, 20),
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        );
-                      },
+    if (messages.isEmpty) {
+      return AppPage(
+        title: 'Notifications',
+        onRefresh: _load,
+        body: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: [
+            SizedBox(
+              height: MediaQuery.of(context).size.height * 0.6,
+              child: failed
+                  ? ErrorState(onRetry: _load)
+                  : const EmptyState(
+                      icon: LucideIcons.bell,
+                      title: 'No notifications',
+                      message:
+                          'Announcements and messages from your school in the last 30 days will show up here.',
                     ),
             ),
+          ],
+        ),
+      );
+    }
+
+    final fresh = messages.where((m) => m.isNew).toList();
+    final earlier = messages.where((m) => !m.isNew).toList();
+
+    return AppPage(
+      title: 'Notifications',
+      onRefresh: _load,
+      body: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(Gap.lg, Gap.sm, Gap.lg, Gap.xl),
+        children: [
+          if (fresh.isNotEmpty) ...[
+            const SectionHeader('New', topGap: false),
+            for (final m in fresh) _swipeable(m),
+          ],
+          if (earlier.isNotEmpty) ...[
+            SectionHeader('Earlier', topGap: fresh.isNotEmpty),
+            for (final m in earlier) _swipeable(m),
+          ],
+        ],
+      ),
     );
   }
 }

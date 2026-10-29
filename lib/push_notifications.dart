@@ -23,17 +23,8 @@ class PushNotifications {
   static String? userFirstName;
 
   static Future init() async {
-    await _firebaseMessaging.requestPermission(
-      alert: true,
-      announcement: true,
-      badge: true,
-      carPlay: false,
-      criticalAlert: false,
-      provisional: false,
-      sound: true,
-    );
-
-    getFCMToken();
+    // Firebase push (its permission prompt and push token) is started by FirebasePush, only for
+    // schools whose server needs it.
     await getUser();
     await getLogin();
   }
@@ -130,6 +121,13 @@ class PushNotifications {
       onDidReceiveNotificationResponse: onNotificationTap,
       onDidReceiveBackgroundNotificationResponse: onNotificationTap,
     );
+
+    // Android 13+ needs the notification permission asked for. The Firebase prompt used to do it;
+    // the app asks for it itself so its own alerts can be shown whether or not Firebase is in use.
+    await _flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.requestNotificationsPermission();
   }
 
   static void onNotificationTap(NotificationResponse notificationResponse) {

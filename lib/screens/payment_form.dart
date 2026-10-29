@@ -1,12 +1,13 @@
 import 'dart:typed_data';
 // import 'dart:html' as html;
 import 'package:flutter/material.dart';
-import 'package:dropdown_button2/dropdown_button2.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 import 'dart:convert';
 import 'package:pushtrial/api/api.dart';
 import 'package:pushtrial/models/payments.dart';
+import 'package:pushtrial/widgets/ui/ui.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pushtrial/models/user.dart';
 import 'package:pushtrial/models/user_data.dart';
@@ -36,6 +37,10 @@ class _PaymentFormState extends State<PaymentForm> {
   bool loading = true;
   List<SchoolInfo> schoolInfo = [];
   Color schoolColor = const Color.fromARGB(0, 255, 255, 255);
+
+  // Bumped after a successful submit so the selects (which only read their initial value)
+  // start over from empty.
+  int _resetCount = 0;
 
   final List<String> _messageReceiverOptions = [
     'Student',
@@ -101,6 +106,17 @@ class _PaymentFormState extends State<PaymentForm> {
   void initState() {
     super.initState();
     _initializeData();
+  }
+
+  @override
+  void dispose() {
+    _bankNameController.dispose();
+    _transactionDateController.dispose();
+    _referenceNumberController.dispose();
+    _paymentAmountController.dispose();
+    _messageReceiverController.dispose();
+    _contactNumberController.dispose();
+    super.dispose();
   }
 
   Future<void> _initializeData() async {
@@ -180,6 +196,16 @@ class _PaymentFormState extends State<PaymentForm> {
     return null;
   }
 
+  void _toast(String message, {bool error = false}) {
+    if (!mounted) return;
+    final toaster = ShadToaster.of(context);
+    toaster.show(
+      error
+          ? ShadToast.destructive(description: Text(message))
+          : ShadToast(description: Text(message)),
+    );
+  }
+
   Future<void> _handlePickImage() async {
     // Use file_picker for image selection (Google Play compliant)
     File? imageFile;
@@ -204,13 +230,22 @@ class _PaymentFormState extends State<PaymentForm> {
       }
     } catch (e) {
       print('Error selecting image: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error selecting image: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      _toast('Error selecting image: $e', error: true);
     }
+  }
+
+  void _clearForm() {
+    _transactionDateController.clear();
+    _referenceNumberController.clear();
+    _paymentAmountController.clear();
+    _messageReceiverController.clear();
+    _contactNumberController.clear();
+    _receiptImageFile = null;
+    _receiptImageBytes = null;
+    setState(() {
+      _selectedPaymentType = null;
+      _resetCount++;
+    });
   }
 
   Future<void> _submitForm() async {
@@ -220,12 +255,7 @@ class _PaymentFormState extends State<PaymentForm> {
         _paymentAmountController.text.isEmpty ||
         _messageReceiverController.text.isEmpty ||
         _contactNumberController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Please fill in all required fields.'),
-          backgroundColor: schoolColor,
-        ),
-      );
+      _toast('Please fill in all required fields.', error: true);
       return;
     }
 
@@ -273,66 +303,22 @@ class _PaymentFormState extends State<PaymentForm> {
 
           if (responseData['status'] == 0 &&
               responseData['message'] == 'Reference Number already exists') {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: const Text('Reference Number already exists.'),
-                backgroundColor: schoolColor,
-              ),
-            );
+            _toast('Reference number already exists.', error: true);
           } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Payment submitted successfully!'),
-                backgroundColor: Color.fromARGB(255, 73, 136, 75),
-              ),
-            );
-            _transactionDateController.clear();
-            _referenceNumberController.clear();
-            _paymentAmountController.clear();
-            _messageReceiverController.clear();
-            _contactNumberController.clear();
-            _receiptImageFile = null;
-            _receiptImageBytes = null;
-            setState(() {
-              _selectedPaymentType = null;
-            });
+            _toast('Payment submitted successfully!');
+            _clearForm();
           }
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Payment submitted successfully!'),
-              backgroundColor: Colors.green,
-            ),
-          );
-
-          _transactionDateController.clear();
-          _referenceNumberController.clear();
-          _paymentAmountController.clear();
-          _messageReceiverController.clear();
-          _contactNumberController.clear();
-          _receiptImageFile = null;
-          _receiptImageBytes = null;
-          setState(() {
-            _selectedPaymentType = null;
-          });
+          _toast('Payment submitted successfully!');
+          _clearForm();
         }
       } else {
         final responseString = await response.stream.bytesToString();
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to submit payment: $responseString'),
-            backgroundColor: schoolColor,
-          ),
-        );
+        _toast('Failed to submit payment: $responseString', error: true);
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('An error occurred. Please try again later.'),
-          backgroundColor: schoolColor,
-        ),
-      );
+      _toast('An error occurred. Please try again later.', error: true);
     } finally {
       setState(() {
         loading = false;
@@ -341,313 +327,225 @@ class _PaymentFormState extends State<PaymentForm> {
     }
   }
 
+  // Label above a form control, with the standard gap below.
+  Widget _field(String label, Widget control) {
+    final text = ShadTheme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Gap.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: text.small.copyWith(fontWeight: FontWeight.w500)),
+          Gap.hSm,
+          control,
+        ],
+      ),
+    );
+  }
+
+  Widget _icon(IconData icon) {
+    final color = ShadTheme.of(context).colorScheme.mutedForeground;
+    return Icon(icon, size: IconSize.row, color: color);
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: Text(
-          'ONLINE PAYMENT FORM',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: schoolColor,
-          ),
-        ),
-        centerTitle: true,
-      ),
-      body: loading
-          ? const Center(
-              child: CircularProgressIndicator(semanticsLabel: 'Loading...'),
-            )
-          : Padding(
-              padding: const EdgeInsets.only(left: 20, right: 20),
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Flexible(
-                          child: DropdownButtonFormField2<String>(
-                            value: _selectedSY,
-                            items: _syOptions
-                                .map(
-                                  (option) => DropdownMenuItem(
-                                    value: option.sydesc,
-                                    child: Text(
-                                      option.sydesc,
-                                      style: const TextStyle(fontSize: 10),
-                                    ),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: (value) {
-                              setState(() {
-                                _selectedSY = value!;
-                              });
-                            },
-                            decoration: const InputDecoration(
-                              labelText: 'School Year',
-                              labelStyle: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                              ),
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Flexible(
-                          child: DropdownButtonFormField2<String>(
-                            value: _selectedSem,
-                            items: _semesterOptions
-                                .map(
-                                  (option) => DropdownMenuItem(
-                                    value: option.semester,
-                                    child: Text(
-                                      option.semester,
-                                      style: const TextStyle(fontSize: 10),
-                                    ),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: (value) {
-                              setState(() {
-                                _selectedSem = value!;
-                              });
-                            },
-                            decoration: const InputDecoration(
-                              labelText: 'Semester',
-                              labelStyle: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                              ),
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField2<String>(
-                      value: _selectedPaymentType,
-                      items: _paymentOptions
-                          .map(
-                            (option) => DropdownMenuItem(
-                              value: option.description,
-                              child: Text(
-                                option.description,
-                                style: const TextStyle(fontSize: 12),
-                              ),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (value) {
-                        setState(() {
-                          _selectedPaymentType = value!;
-                        });
-                      },
-                      decoration: const InputDecoration(
-                        labelText: 'Payment Type',
-                        labelStyle: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        prefixIcon: Icon(Icons.payments),
-                        border: OutlineInputBorder(),
-                      ),
-                      buttonStyleData: const ButtonStyleData(height: 20),
-                    ),
-                    const SizedBox(height: 12),
-                    if (_selectedPaymentType == 'BANK') ...[
-                      DropdownButtonFormField2<String>(
-                        items: _bankOptions
-                            .map(
-                              (option) => DropdownMenuItem(
-                                value: option.optionDescription,
-                                child: Text(
-                                  option.optionDescription,
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (value) {
-                          setState(() {
-                            _bankNameController.text = value!;
-                          });
-                        },
-                        decoration: const InputDecoration(
-                          labelText: 'Bank Name',
-                          labelStyle: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                          ),
-                          prefixIcon: Icon(
-                            Icons.account_balance,
-                            color: Colors.grey,
-                          ),
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                    TextFormField(
-                      controller: _transactionDateController,
-                      decoration: const InputDecoration(
-                        labelText: 'Bank Transaction Date',
-                        hintText: "MM/DD/YYYY",
-                        labelStyle: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        prefixIcon: Icon(Icons.date_range, color: Colors.grey),
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _referenceNumberController,
-                      decoration: const InputDecoration(
-                        labelText: 'Reference Number',
-                        labelStyle: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        prefixIcon: Icon(Icons.numbers, color: Colors.grey),
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _paymentAmountController,
-                      decoration: const InputDecoration(
-                        labelText: 'Payment Amount',
-                        labelStyle: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        prefixIcon: Icon(Icons.money, color: Colors.grey),
-                        border: OutlineInputBorder(),
-                      ),
-                      keyboardType: TextInputType.number,
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField2<String>(
-                      items: _messageReceiverOptions
-                          .map(
-                            (option) => DropdownMenuItem(
-                              value: option,
-                              child: Text(
-                                option,
-                                style: const TextStyle(fontSize: 12),
-                              ),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (value) {
-                        setState(() {
-                          _messageReceiverController.text = value!;
-                          _contactNumberController.text = getContactNumber(
-                            value,
-                          )!;
-                        });
-                      },
-                      decoration: const InputDecoration(
-                        labelText: 'Message Receiver',
-                        labelStyle: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        prefixIcon: Icon(Icons.message, color: Colors.grey),
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _contactNumberController,
-                      decoration: const InputDecoration(
-                        labelText: 'Contact Number',
-                        labelStyle: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        prefixIcon: Icon(Icons.phone, color: Colors.grey),
-                        border: OutlineInputBorder(),
-                      ),
-                      keyboardType: TextInputType.phone,
-                    ),
-                    const SizedBox(height: 12),
-                    GestureDetector(
-                      onTap: _handlePickImage,
-                      child: Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.photo_library, color: Colors.grey),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                _receiptImageBytes != null
-                                    ? 'Receipt image selected'
-                                    : 'Select Receipt Image from Gallery',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: _receiptImageBytes != null
-                                      ? Colors.green
-                                      : Colors.grey[600],
-                                ),
-                              ),
-                            ),
-                            if (_receiptImageBytes != null)
-                              const Icon(
-                                Icons.check_circle,
-                                color: Colors.green,
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    if (_receiptImageBytes != null)
-                      Image.memory(
-                        _receiptImageBytes!,
-                        height: 200,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                      ),
-                    const SizedBox(height: 12),
-                    Center(
-                      child: SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: _submitForm,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: schoolColor,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                          child: const Text(
-                            'Submit Payment',
-                            style: TextStyle(fontFamily: 'Poppins'),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
+    if (loading) {
+      return const AppPage(title: 'Online payment form', body: LoadingSkeleton());
+    }
+    final theme = ShadTheme.of(context);
+    final hasReceipt = _receiptImageBytes != null;
+
+    return AppPage(
+      title: 'Online payment form',
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: _field(
+                'School year',
+                ShadSelect<String>(
+                  placeholder: const Text('Select school year'),
+                  initialValue: _selectedSY,
+                  options: [
+                    for (final option in _syOptions)
+                      ShadOption(value: option.sydesc, child: Text(option.sydesc)),
                   ],
+                  selectedOptionBuilder: (context, value) => Text(value),
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedSY = value;
+                    });
+                  },
                 ),
               ),
             ),
+            Gap.wSm,
+            Expanded(
+              child: _field(
+                'Semester',
+                ShadSelect<String>(
+                  placeholder: const Text('Select semester'),
+                  initialValue: _selectedSem,
+                  options: [
+                    for (final option in _semesterOptions)
+                      ShadOption(value: option.semester, child: Text(option.semester)),
+                  ],
+                  selectedOptionBuilder: (context, value) => Text(value),
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedSem = value;
+                    });
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+        _field(
+          'Payment type',
+          ShadSelect<String>(
+            key: ValueKey('type-$_resetCount'),
+            placeholder: const Text('Select payment type'),
+            initialValue: _selectedPaymentType,
+            options: [
+              for (final option in _paymentOptions)
+                ShadOption(value: option.description, child: Text(option.description)),
+            ],
+            selectedOptionBuilder: (context, value) => Row(
+              children: [
+                _icon(LucideIcons.banknote),
+                Gap.wSm,
+                Flexible(child: Text(value, overflow: TextOverflow.ellipsis)),
+              ],
+            ),
+            onChanged: (value) {
+              setState(() {
+                _selectedPaymentType = value;
+              });
+            },
+          ),
+        ),
+        if (_selectedPaymentType == 'BANK')
+          _field(
+            'Bank name',
+            ShadSelect<String>(
+              key: ValueKey('bank-$_resetCount'),
+              placeholder: const Text('Select bank'),
+              initialValue: _bankNameController.text.isEmpty ? null : _bankNameController.text,
+              options: [
+                for (final option in _bankOptions)
+                  ShadOption(value: option.optionDescription, child: Text(option.optionDescription)),
+              ],
+              selectedOptionBuilder: (context, value) => Row(
+                children: [
+                  _icon(LucideIcons.landmark),
+                  Gap.wSm,
+                  Flexible(child: Text(value, overflow: TextOverflow.ellipsis)),
+                ],
+              ),
+              onChanged: (value) {
+                setState(() {
+                  _bankNameController.text = value!;
+                });
+              },
+            ),
+          ),
+        _field(
+          'Bank transaction date',
+          ShadInput(
+            controller: _transactionDateController,
+            placeholder: const Text('MM/DD/YYYY'),
+            leading: _icon(LucideIcons.calendarDays),
+          ),
+        ),
+        _field(
+          'Reference number',
+          ShadInput(
+            controller: _referenceNumberController,
+            placeholder: const Text('Reference number'),
+            leading: _icon(LucideIcons.hash),
+          ),
+        ),
+        _field(
+          'Payment amount',
+          ShadInput(
+            controller: _paymentAmountController,
+            placeholder: const Text('0.00'),
+            leading: _icon(LucideIcons.banknote),
+            keyboardType: TextInputType.number,
+          ),
+        ),
+        _field(
+          'Message receiver',
+          ShadSelect<String>(
+            key: ValueKey('receiver-$_resetCount'),
+            placeholder: const Text('Select receiver'),
+            initialValue: _messageReceiverController.text.isEmpty ? null : _messageReceiverController.text,
+            options: [
+              for (final option in _messageReceiverOptions)
+                ShadOption(value: option, child: Text(option)),
+            ],
+            selectedOptionBuilder: (context, value) => Row(
+              children: [
+                _icon(LucideIcons.messageSquare),
+                Gap.wSm,
+                Flexible(child: Text(value, overflow: TextOverflow.ellipsis)),
+              ],
+            ),
+            onChanged: (value) {
+              setState(() {
+                _messageReceiverController.text = value!;
+                _contactNumberController.text = getContactNumber(
+                  value,
+                )!;
+              });
+            },
+          ),
+        ),
+        _field(
+          'Contact number',
+          ShadInput(
+            controller: _contactNumberController,
+            placeholder: const Text('Contact number'),
+            leading: _icon(LucideIcons.phone),
+            keyboardType: TextInputType.phone,
+          ),
+        ),
+        _field(
+          'Receipt',
+          ShadButton.outline(
+            width: double.infinity,
+            onPressed: _handlePickImage,
+            leading: Icon(
+              hasReceipt ? LucideIcons.circleCheck : LucideIcons.imagePlus,
+              size: IconSize.row,
+            ),
+            child: Text(hasReceipt ? 'Receipt image selected' : 'Select receipt image from gallery'),
+          ),
+        ),
+        if (hasReceipt)
+          Padding(
+            padding: const EdgeInsets.only(bottom: Gap.lg),
+            child: ClipRRect(
+              borderRadius: theme.radius,
+              child: Image.memory(
+                _receiptImageBytes!,
+                height: 200,
+                width: double.infinity,
+                fit: BoxFit.cover,
+              ),
+            ),
+          ),
+        Gap.hSm,
+        ShadButton(
+          width: double.infinity,
+          onPressed: _submitForm,
+          leading: const Icon(LucideIcons.upload, size: IconSize.row),
+          child: const Text('Submit payment'),
+        ),
+      ],
     );
   }
 }
