@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'package:dropdown_button2/dropdown_button2.dart';
 import 'package:flutter/material.dart';
 import 'package:pushtrial/api/api.dart';
 import 'package:pushtrial/models/enrolled_stud.dart';
@@ -8,6 +7,8 @@ import 'package:pushtrial/models/school_info.dart';
 import 'package:pushtrial/models/user.dart';
 import 'package:pushtrial/models/user_data.dart';
 import 'package:pushtrial/models/year_sem.dart';
+import 'package:pushtrial/widgets/ui/ui.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ClassScheduleV2Screen extends StatefulWidget {
@@ -18,6 +19,12 @@ class ClassScheduleV2Screen extends StatefulWidget {
 }
 
 class _ClassScheduleV2ScreenState extends State<ClassScheduleV2Screen> {
+
+  // Slow responses can finish after the screen was closed; skip the update then.
+  @override
+  void setState(VoidCallback fn) {
+    if (mounted) super.setState(fn);
+  }
   User user = UserData.myUser;
   String studid = '0';
 
@@ -27,7 +34,7 @@ class _ClassScheduleV2ScreenState extends State<ClassScheduleV2Screen> {
   List<Sem> schoolSem = [];
   List<SchoolInfo> schoolInfo = [];
 
-  Color schoolColor = const Color.fromARGB(255, 14, 19, 29);
+  Color schoolColor = const Color.fromARGB(0, 0, 0, 0);
 
   int syid = 0;
   int semid = 0;
@@ -162,222 +169,218 @@ class _ClassScheduleV2ScreenState extends State<ClassScheduleV2Screen> {
     _loadSchedule();
   }
 
+  /// School colour for small icon accents; falls back to the theme primary until it loads
+  /// (and lightens in dark mode so it stays readable).
+  Color _accent(BuildContext context) {
+    final theme = ShadTheme.of(context);
+    if (schoolColor.a == 0) return theme.colorScheme.primary;
+    return Theme.of(context).brightness == Brightness.dark
+        ? Color.lerp(schoolColor, Colors.white, 0.4)!
+        : schoolColor;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: Text(
-          'CLASS SCHEDULE',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: schoolColor,
-          ),
-        ),
-        centerTitle: true,
-      ),
+    final showSem = levelid == 14 || levelid == 15 || levelid >= 17;
+    return AppPage(
+      title: 'Class schedule',
       body: loading
-          ? const Center(child: CircularProgressIndicator())
-          : Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: DropdownButtonFormField2<String>(
-                          value: selectedYear.isNotEmpty ? selectedYear : null,
-                          hint: const Text('School Year', style: TextStyle(fontSize: 12)),
-                          items: schoolYear
-                              .map((y) => DropdownMenuItem(
-                                    value: y.id.toString(),
-                                    child: Text(y.sydesc, style: const TextStyle(fontSize: 12)),
-                                  ))
-                              .toList(),
-                          onChanged: (v) { if (v != null) _onYearChanged(v); },
-                          decoration: const InputDecoration(
-                            labelText: 'School Year',
-                            labelStyle: TextStyle(fontSize: 12),
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                      ),
-                      if (levelid == 14 || levelid == 15 || levelid >= 17) ...[
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: DropdownButtonFormField2<String>(
-                            value: selectedSem.isNotEmpty ? selectedSem : null,
-                            hint: const Text('Semester', style: TextStyle(fontSize: 12)),
-                            items: schoolSem
-                                .map((s) => DropdownMenuItem(
-                                      value: s.id.toString(),
-                                      child: Text(s.semester, style: const TextStyle(fontSize: 12)),
-                                    ))
-                                .toList(),
-                            onChanged: (v) { if (v != null) _onSemChanged(v); },
-                            decoration: const InputDecoration(
-                              labelText: 'Semester',
-                              labelStyle: TextStyle(fontSize: 12),
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  if (subjects.isEmpty)
+          ? const LoadingSkeleton()
+          : ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(Gap.lg, Gap.sm, Gap.lg, Gap.xl),
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Expanded(
-                      child: Center(
-                        child: Text(
-                          'No subjects found',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                            color: schoolColor,
-                          ),
-                        ),
-                      ),
-                    )
-                  else
-                    Expanded(
-                      child: ListView.builder(
-                        itemCount: subjects.length,
-                        itemBuilder: (context, index) {
-                          final subj = subjects[index];
-                          return _buildSubjectCard(subj);
-                        },
+                      child: _FieldSelect(
+                        label: 'School year',
+                        value: selectedYear.isNotEmpty ? selectedYear : null,
+                        options: [for (final y in schoolYear) (y.id.toString(), y.sydesc)],
+                        onChanged: _onYearChanged,
                       ),
                     ),
-                ],
-              ),
+                    if (showSem) ...[
+                      Gap.wMd,
+                      Expanded(
+                        child: _FieldSelect(
+                          label: 'Semester',
+                          value: selectedSem.isNotEmpty ? selectedSem : null,
+                          options: [for (final s in schoolSem) (s.id.toString(), s.semester)],
+                          onChanged: _onSemChanged,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                Gap.hXl,
+                if (subjects.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.only(top: Gap.xxl),
+                    child: EmptyState(
+                      title: 'No subjects found',
+                      message: 'There is no schedule for the selected school year.',
+                      icon: LucideIcons.calendarX,
+                    ),
+                  )
+                else
+                  for (final subj in subjects) _buildSubjectCard(subj),
+              ],
             ),
     );
   }
 
   Widget _buildSubjectCard(V2Subject subj) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.grey[100],
-        borderRadius: BorderRadius.circular(8),
-      ),
-      clipBehavior: Clip.antiAlias,
+    final theme = ShadTheme.of(context);
+    final text = theme.textTheme;
+    final accent = _accent(context);
+    return AppCard(
+      padding: Gap.card,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            color: schoolColor,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  subj.subjdesc,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                if (subj.subjcode.isNotEmpty)
-                  Text(
-                    subj.subjcode,
-                    style: const TextStyle(color: Colors.white70, fontSize: 11),
-                  ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(subj.subjdesc, style: text.large, maxLines: 3, overflow: TextOverflow.ellipsis),
+              ),
+              if (subj.subjcode.isNotEmpty) ...[
+                Gap.wSm,
+                ShadBadge.secondary(child: Text(subj.subjcode)),
               ],
-            ),
+            ],
           ),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (subj.teacherName.isNotEmpty)
-                  Row(
-                    children: [
-                      const Icon(Icons.person, size: 15, color: Colors.grey),
-                      const SizedBox(width: 6),
-                      Text(
-                        subj.teacherName,
-                        style: const TextStyle(fontSize: 12, color: Colors.black87),
-                      ),
-                    ],
-                  ),
-                if (subj.teacherName.isNotEmpty) const SizedBox(height: 6),
-                if (subj.schedule.isEmpty)
-                  Row(
-                    children: const [
-                      Icon(Icons.schedule, size: 15, color: Colors.grey),
-                      SizedBox(width: 6),
-                      Text(
-                        'No schedule assigned',
-                        style: TextStyle(fontSize: 12, color: Colors.grey),
-                      ),
-                    ],
-                  )
-                else
-                  ...subj.schedule.map((slot) => _buildSlot(slot)),
-              ],
-            ),
-          ),
+          if (subj.teacherName.isNotEmpty) ...[
+            Gap.hSm,
+            _Meta(icon: LucideIcons.user, text: subj.teacherName, color: accent),
+          ],
+          Gap.hMd,
+          Divider(height: 1, color: theme.colorScheme.border),
+          Gap.hMd,
+          if (subj.schedule.isEmpty)
+            _Meta(icon: LucideIcons.clock, text: 'No schedule assigned', color: accent, muted: true)
+          else
+            for (var i = 0; i < subj.schedule.length; i++) ...[
+              if (i > 0) Gap.hMd,
+              _buildSlot(subj.schedule[i], accent),
+            ],
         ],
       ),
     );
   }
 
-  Widget _buildSlot(V2ScheduleSlot slot) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (slot.day.isNotEmpty)
-            Row(
-              children: [
-                const Icon(Icons.calendar_today, size: 14, color: Colors.grey),
-                const SizedBox(width: 6),
-                Text(slot.day, style: const TextStyle(fontSize: 12, color: Colors.black87)),
-              ],
-            ),
-          if (slot.start.isNotEmpty || slot.end.isNotEmpty) ...[
-            const SizedBox(height: 2),
-            Row(
-              children: [
-                const Icon(Icons.access_time, size: 14, color: Colors.grey),
-                const SizedBox(width: 6),
-                Text(
-                  '${slot.start} - ${slot.end}',
-                  style: const TextStyle(fontSize: 12, color: Colors.black87),
-                ),
-              ],
-            ),
+  Widget _buildSlot(V2ScheduleSlot slot, Color accent) {
+    final text = ShadTheme.of(context).textTheme;
+    final hasTime = slot.start.isNotEmpty || slot.end.isNotEmpty;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (slot.day.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: Gap.xs),
+            child: Text(slot.day, style: text.p.copyWith(fontWeight: FontWeight.w600)),
+          ),
+        Wrap(
+          spacing: Gap.lg,
+          runSpacing: Gap.xs,
+          children: [
+            if (hasTime)
+              _Meta(
+                icon: LucideIcons.clock,
+                text: '${slot.start} - ${slot.end}',
+                color: accent,
+                muted: true,
+              ),
+            if (slot.room.isNotEmpty)
+              _Meta(icon: LucideIcons.doorOpen, text: slot.room, color: accent, muted: true),
+            if (slot.type.isNotEmpty)
+              _Meta(icon: LucideIcons.tag, text: slot.type, color: accent, muted: true),
           ],
-          if (slot.room.isNotEmpty) ...[
-            const SizedBox(height: 2),
-            Row(
-              children: [
-                const Icon(Icons.meeting_room, size: 14, color: Colors.grey),
-                const SizedBox(width: 6),
-                Text(slot.room, style: const TextStyle(fontSize: 12, color: Colors.black87)),
-              ],
-            ),
-          ],
-          if (slot.type.isNotEmpty) ...[
-            const SizedBox(height: 2),
-            Row(
-              children: [
-                const Icon(Icons.label_outline, size: 14, color: Colors.grey),
-                const SizedBox(width: 6),
-                Text(slot.type, style: const TextStyle(fontSize: 12, color: Colors.black87)),
-              ],
-            ),
-          ],
-        ],
-      ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Small icon + text line (teacher, time, room). Wraps instead of clipping.
+class _Meta extends StatelessWidget {
+  const _Meta({required this.icon, required this.text, required this.color, this.muted = false});
+
+  final IconData icon;
+  final String text;
+  final Color color;
+  final bool muted;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = ShadTheme.of(context);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Icon(icon, size: IconSize.inline, color: color),
+        ),
+        Gap.wSm,
+        Flexible(
+          child: Text(text, style: muted ? theme.textTheme.muted : theme.textTheme.small),
+        ),
+      ],
+    );
+  }
+}
+
+/// Labelled shadcn select. Rebuilds when [value] changes from outside (year changes the
+/// semester), because [ShadSelect] only reads its initial value once.
+class _FieldSelect extends StatelessWidget {
+  const _FieldSelect({
+    required this.label,
+    required this.value,
+    required this.options,
+    required this.onChanged,
+  });
+
+  final String label;
+  final String? value;
+  final List<(String, String)> options;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = ShadTheme.of(context).textTheme;
+    String labelOf(String v) {
+      for (final o in options) {
+        if (o.$1 == v) return o.$2;
+      }
+      return v;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: text.small),
+        Gap.hXs,
+        LayoutBuilder(
+          builder: (context, constraints) => ShadSelect<String>(
+            key: ValueKey('$label-$value-${options.length}'),
+            minWidth: constraints.maxWidth,
+            maxWidth: constraints.maxWidth,
+            placeholder: Text('Select ${label.toLowerCase()}'),
+            initialValue: value,
+            options: [
+              for (final o in options) ShadOption<String>(value: o.$1, child: Text(o.$2)),
+            ],
+            selectedOptionBuilder: (context, v) =>
+                Text(labelOf(v), maxLines: 1, overflow: TextOverflow.ellipsis),
+            onChanged: (v) {
+              if (v != null) onChanged(v);
+            },
+          ),
+        ),
+      ],
     );
   }
 }

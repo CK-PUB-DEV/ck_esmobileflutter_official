@@ -1,30 +1,44 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:pushtrial/main.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('Shad input validates inside a Material form', (tester) async {
+    final formKey = GlobalKey<FormState>();
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    await tester.pumpWidget(
+      ShadApp.custom(
+        theme: ShadThemeData(colorScheme: const ShadRedColorScheme.light()),
+        appBuilder: (context) => MaterialApp(
+          theme: Theme.of(context),
+          localizationsDelegates: const [
+            GlobalShadLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+          ],
+          builder: (context, child) => ShadAppBuilder(child: child!),
+          home: Scaffold(
+            body: Form(
+              key: formKey,
+              child: ShadInputFormField(
+                controller: controller,
+                placeholder: const Text('Username'),
+                validator: (value) => value.isEmpty ? 'Required' : null,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
+    expect(formKey.currentState!.validate(), isFalse);
+    await tester.enterText(find.byType(EditableText), 'student');
     await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(formKey.currentState!.validate(), isTrue);
+    expect(controller.text, 'student');
   });
 }

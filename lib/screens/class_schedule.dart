@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:dropdown_button2/dropdown_button2.dart';
-import 'package:intl/intl.dart';
+import 'package:pushtrial/widgets/ui/ui.dart';
 import 'package:pushtrial/models/user_data.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pushtrial/models/user.dart';
@@ -9,7 +8,7 @@ import 'package:pushtrial/models/enrolled_stud.dart';
 import 'package:pushtrial/models/school_info.dart';
 import 'package:pushtrial/models/schedule.dart';
 import 'dart:convert';
-import 'package:loading_animation_widget/loading_animation_widget.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:pushtrial/models/year_sem.dart';
 
 class ClassScheduleScreen extends StatefulWidget {
@@ -20,6 +19,12 @@ class ClassScheduleScreen extends StatefulWidget {
 }
 
 class _ClassScheduleScreenState extends State<ClassScheduleScreen> {
+
+  // Slow responses can finish after the screen was closed; skip the update then.
+  @override
+  void setState(VoidCallback fn) {
+    if (mounted) super.setState(fn);
+  }
   User user = UserData.myUser;
   String id = '0';
   List<String> semesters = [];
@@ -340,406 +345,159 @@ class _ClassScheduleScreenState extends State<ClassScheduleScreen> {
     }
   }
 
+  EnrolledStud _emptyEnrollment() => EnrolledStud(
+    id: 0,
+    studid: 0,
+    syid: 0,
+    semid: 0,
+    dateenrolled: '',
+    levelid: 0,
+    sectionid: 0,
+    strandid: 0,
+    studstatus: 0,
+    levelname: '',
+    strandname: '',
+    description: '',
+    courseDesc: '',
+    semester: '',
+    sectionname: '',
+    sydesc: '',
+  );
+
+  void _onYearChanged(String value) {
+    setState(() {
+      selectedYear = value;
+      syid = int.parse(selectedYear);
+
+      EnrolledStud? selectedEnrollment = enrolledstud.firstWhere(
+        (enrollment) => enrollment.syid == syid,
+        orElse: () {
+          ShadToaster.of(context).show(
+            const ShadToast(description: Text('No schedule for this school year')),
+          );
+          return _emptyEnrollment();
+        },
+      );
+
+      levelid = selectedEnrollment.levelid;
+      sectionid = selectedEnrollment.sectionid;
+    });
+    if (selectedYear.isNotEmpty && selectedSem.isNotEmpty) {
+      getStudSchedule(int.parse(semid.toString()));
+    }
+  }
+
+  void _onSemChanged(String value) {
+    setState(() {
+      selectedSem = value;
+      semid = int.parse(selectedSem);
+    });
+    if (selectedYear.isNotEmpty && selectedSem.isNotEmpty) {
+      getStudSchedule(semid);
+    }
+  }
+
+  /// School colour for small icon accents; falls back to the theme primary until it loads
+  /// (and lightens in dark mode so it stays readable).
+  Color _accent(BuildContext context) {
+    final theme = ShadTheme.of(context);
+    if (schoolColor.a == 0) return theme.colorScheme.primary;
+    return Theme.of(context).brightness == Brightness.dark
+        ? Color.lerp(schoolColor, Colors.white, 0.4)!
+        : schoolColor;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: Text(
-          'CLASS SCHEDULE',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: schoolColor,
-          ),
-        ),
-        centerTitle: true,
-      ),
+    final showSem = levelid == 14 || levelid == 15 || levelid >= 17;
+    return AppPage(
+      title: 'Class schedule',
       body: loading
-          ? const Center(
-              child: CircularProgressIndicator(semanticsLabel: 'Loading...'),
-            )
-          : Padding(
-              padding: const EdgeInsets.only(
-                left: 20.0,
-                top: 10.0,
-                right: 20.0,
-                bottom: 30.0,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    spacing: 2.0,
-                    children: [
-                      Flexible(
-                        child: DropdownButtonFormField2<String>(
-                          hint: Text(
-                            enrolledstud[0].sydesc,
-                            style: const TextStyle(fontSize: 10),
-                          ),
-                          items: schoolYear
-                              .map(
-                                (option) => DropdownMenuItem(
-                                  value: option.id.toString(),
-                                  child: Text(
-                                    option.sydesc,
-                                    style: const TextStyle(fontSize: 10),
-                                  ),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (value) {
-                            setState(() {
-                              selectedYear = value!;
-                              syid = int.parse(selectedYear);
-
-                              EnrolledStud? selectedEnrollment = enrolledstud
-                                  .firstWhere(
-                                    (enrollment) => enrollment.syid == syid,
-                                    orElse: () {
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        SnackBar(
-                                          content: const Text(
-                                            "No Schedule for this School Year",
-                                          ),
-                                          backgroundColor: schoolColor,
-                                        ),
-                                      );
-
-                                      return EnrolledStud(
-                                        id: 0,
-                                        studid: 0,
-                                        syid: 0,
-                                        semid: 0,
-                                        dateenrolled: '',
-                                        levelid: 0,
-                                        sectionid: 0,
-                                        strandid: 0,
-                                        studstatus: 0,
-                                        levelname: '',
-                                        strandname: '',
-                                        description: '',
-                                        courseDesc: '',
-                                        semester: '',
-                                        sectionname: '',
-                                        sydesc: '',
-                                      );
-                                    },
-                                  );
-
-                              if (selectedEnrollment != null) {
-                                levelid = selectedEnrollment.levelid;
-                                sectionid = selectedEnrollment.sectionid;
-                              } else {
-                                levelid = 0;
-                                sectionid = 0;
-                              }
-
-                              if (selectedYear.isNotEmpty &&
-                                  selectedSem.isNotEmpty) {
-                                getStudSchedule(int.parse(semid.toString()));
-                              }
-                            });
-                          },
-                          decoration: const InputDecoration(
-                            labelText: 'School Year',
-                            labelStyle: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                            border: OutlineInputBorder(),
-                          ),
+          ? const LoadingSkeleton()
+          : ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(Gap.lg, Gap.sm, Gap.lg, Gap.xl),
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: _FieldSelect(
+                        label: 'School year',
+                        value: selectedYear.isNotEmpty ? selectedYear : null,
+                        options: [for (final y in schoolYear) (y.id.toString(), y.sydesc)],
+                        onChanged: _onYearChanged,
+                      ),
+                    ),
+                    if (showSem) ...[
+                      Gap.wMd,
+                      Expanded(
+                        child: _FieldSelect(
+                          label: 'Semester',
+                          value: selectedSem.isNotEmpty ? selectedSem : null,
+                          options: [for (final s in schoolSem) (s.id.toString(), s.semester)],
+                          onChanged: _onSemChanged,
                         ),
                       ),
-
-                      if (levelid == 14 || levelid == 15 || levelid >= 17) ...[
-                        // const SizedBox(width: 10.0),
-                        Flexible(
-                          child: DropdownButtonFormField2<String>(
-                            hint: Text(
-                              enrolledstud[0].semester,
-                              style: const TextStyle(fontSize: 10),
-                            ),
-                            items: schoolSem
-                                .map(
-                                  (option) => DropdownMenuItem(
-                                    value: option.id.toString(),
-                                    child: Text(
-                                      option.semester,
-                                      style: const TextStyle(fontSize: 10),
-                                    ),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: (value) {
-                              setState(() {
-                                selectedSem = value!;
-                                semid = int.parse(selectedSem);
-                              });
-                              if (selectedYear.isNotEmpty &&
-                                  selectedSem.isNotEmpty) {
-                                getStudSchedule(semid);
-                              }
-                            },
-                            decoration: const InputDecoration(
-                              labelText: 'Semester',
-                              labelStyle: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                              ),
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                        ),
-                      ],
                     ],
-                  ),
-                  const SizedBox(height: 20.0),
-                  if (levelid == 0) ...[
-                    Expanded(
-                      child: Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Image.asset('assets/search1.png'),
-                            const SizedBox(height: 10.0),
-                            Text(
-                              "No class schedule available for the selected year and semester",
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                                color: schoolColor,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ] else ...[
-                    DropdownButtonFormField2<String>(
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        labelText: 'Select Day',
-                        labelStyle: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      isExpanded: true,
-                      value:
-                          selectedMonth != null &&
-                              months.contains(selectedMonth)
-                          ? selectedMonth
-                          : null,
-                      hint: const Text(
-                        'Choose a day',
-                        style: TextStyle(fontSize: 12, fontFamily: 'Poppins'),
-                      ),
-                      onChanged: (String? newValue) {
-                        setState(() {
-                          selectedMonth = newValue!;
-                        });
-                      },
-                      items: ['All', ...months].map<DropdownMenuItem<String>>((
-                        String month,
-                      ) {
-                        return DropdownMenuItem<String>(
-                          value: month,
-                          child: Text(
-                            month.toUpperCase(),
-                            style: const TextStyle(
-                              fontSize: 12,
-
-                              color: Colors.black,
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                    const SizedBox(height: 20.0),
-                    Expanded(
-                      child: selectedMonth == 'All' && listOfItem2.isNotEmpty
-                          ? SingleChildScrollView(
-                              scrollDirection: Axis.vertical,
-                              child: Column(
-                                children: _groupItemsByDay(listOfItem2).entries
-                                    .map((entry) {
-                                      return Card(
-                                        color: Colors.white,
-                                        elevation: 2.0,
-                                        child: Padding(
-                                          padding: const EdgeInsets.all(16.0),
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Center(
-                                                child: Text(
-                                                  entry.key.toUpperCase(),
-                                                  style: TextStyle(
-                                                    fontSize: 16,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: schoolColor,
-                                                  ),
-                                                  textAlign: TextAlign.center,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 10.0),
-                                              ...entry.value.map((item) {
-                                                return Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    Text(
-                                                      item.subject,
-                                                      style: const TextStyle(
-                                                        fontSize: 14,
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                      ),
-                                                      overflow:
-                                                          TextOverflow.clip,
-                                                      maxLines: 2,
-                                                    ),
-                                                    const SizedBox(height: 4.0),
-                                                    if (item.room.isNotEmpty)
-                                                      Row(
-                                                        children: [
-                                                          const Icon(
-                                                            Icons.meeting_room,
-                                                            size: 16,
-                                                          ),
-                                                          const SizedBox(
-                                                            width: 8.0,
-                                                          ),
-                                                          Text(
-                                                            item.room,
-                                                            style:
-                                                                const TextStyle(
-                                                                  fontFamily:
-                                                                      'Poppins',
-                                                                  fontSize: 12,
-                                                                  color: Colors
-                                                                      .grey,
-                                                                ),
-                                                          ),
-                                                        ],
-                                                      ),
-                                                    const SizedBox(height: 4.0),
-                                                    Row(
-                                                      children: [
-                                                        const Icon(
-                                                          Icons.access_time,
-                                                          size: 16,
-                                                        ),
-                                                        const SizedBox(
-                                                          width: 8.0,
-                                                        ),
-                                                        Text(
-                                                          '${item.start} - ${item.end}',
-                                                          style:
-                                                              const TextStyle(
-                                                                fontFamily:
-                                                                    'Poppins',
-                                                                fontSize: 12,
-                                                                color:
-                                                                    Colors.grey,
-                                                              ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                    const SizedBox(height: 4.0),
-                                                    if (item.teacher.isNotEmpty)
-                                                      Row(
-                                                        children: [
-                                                          const Icon(
-                                                            Icons.person,
-                                                            size: 16,
-                                                          ),
-                                                          const SizedBox(
-                                                            width: 8.0,
-                                                          ),
-                                                          Text(
-                                                            item.teacher,
-                                                            style:
-                                                                const TextStyle(
-                                                                  fontFamily:
-                                                                      'Poppins',
-                                                                  fontSize: 12,
-                                                                  color: Colors
-                                                                      .grey,
-                                                                ),
-                                                          ),
-                                                        ],
-                                                      ),
-                                                    const SizedBox(
-                                                      height: 25.0,
-                                                    ),
-                                                  ],
-                                                );
-                                              }).toList(),
-                                            ],
-                                          ),
-                                        ),
-                                      );
-                                    })
-                                    .toList(),
-                              ),
-                            )
-                          : selectedMonth.isNotEmpty && listOfItem2.isNotEmpty
-                          ? buildFilteredScheduleList()
-                          : Center(
-                              child: selectedYear == '' || selectedSem == ''
-                                  ? Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Image.asset('assets/search1.png'),
-                                        const SizedBox(height: 10.0),
-                                        Text(
-                                          "Select School Year and Semester\nto fetch data.",
-                                          style: TextStyle(
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.bold,
-                                            color: schoolColor,
-                                          ),
-                                          textAlign: TextAlign.center,
-                                        ),
-                                      ],
-                                    )
-                                  : Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Image.asset('assets/search1.png'),
-                                        const SizedBox(height: 10.0),
-                                        Text(
-                                          "No available schedule",
-                                          style: TextStyle(
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.bold,
-                                            color: schoolColor,
-                                          ),
-                                          textAlign: TextAlign.center,
-                                        ),
-                                      ],
-                                    ),
-                            ),
-                    ),
                   ],
+                ),
+                Gap.hLg,
+                if (levelid == 0)
+                  const Padding(
+                    padding: EdgeInsets.only(top: Gap.xxl),
+                    child: EmptyState(
+                      title: 'No class schedule available',
+                      message: 'There is no schedule for the selected school year and semester.',
+                      icon: LucideIcons.calendarX,
+                    ),
+                  )
+                else ...[
+                  _FieldSelect(
+                    label: 'Day',
+                    value: months.contains(selectedMonth) || selectedMonth == 'All'
+                        ? selectedMonth
+                        : null,
+                    options: [for (final m in ['All', ...months]) (m, m)],
+                    onChanged: (v) => setState(() => selectedMonth = v),
+                  ),
+                  Gap.hXl,
+                  ..._scheduleChildren(context),
                 ],
-              ),
+              ],
             ),
     );
   }
 
-  Widget buildFilteredScheduleList() {
+  List<Widget> _scheduleChildren(BuildContext context) {
+    final accent = _accent(context);
+    if (selectedMonth == 'All' && listOfItem2.isNotEmpty) {
+      return [
+        for (final entry in _groupItemsByDay(listOfItem2).entries)
+          _DayCard(title: entry.key, items: entry.value, accent: accent),
+      ];
+    }
+    if (selectedMonth.isNotEmpty && listOfItem2.isNotEmpty) {
+      return buildFilteredScheduleList(accent);
+    }
+    return [
+      Padding(
+        padding: const EdgeInsets.only(top: Gap.xxl),
+        child: selectedYear == '' || selectedSem == ''
+            ? const EmptyState(
+                title: 'Select school year and semester',
+                message: 'Pick both to load the schedule.',
+                icon: LucideIcons.calendarDays,
+              )
+            : const EmptyState(
+                title: 'No available schedule',
+                icon: LucideIcons.calendarX,
+              ),
+      ),
+    ];
+  }
+
+  List<Widget> buildFilteredScheduleList(Color accent) {
     // Filter by selected month
     List<SchedItem> filteredList = selectedMonth == 'All'
         ? List.from(listOfItem2)
@@ -764,116 +522,170 @@ class _ClassScheduleScreenState extends State<ClassScheduleScreen> {
       ..sort((a, b) => parseTime(a.start).compareTo(parseTime(b.start)));
 
     if (uniqueFilteredList.isEmpty) {
-      return Center(
-        child: Text(
-          "No available schedule",
-          style: TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.bold,
-            color: schoolColor,
-          ),
-          textAlign: TextAlign.center,
+      return const [
+        Padding(
+          padding: EdgeInsets.only(top: Gap.xxl),
+          child: EmptyState(title: 'No available schedule', icon: LucideIcons.calendarX),
         ),
-      );
+      ];
     }
 
-    return ListView.builder(
-      itemCount: uniqueFilteredList.length,
-      itemBuilder: (context, index) {
-        final item = uniqueFilteredList[index];
+    return [_DayCard(title: selectedMonth, items: uniqueFilteredList, accent: accent)];
+  }
+}
 
-        return Container(
-          margin: const EdgeInsets.only(bottom: 16.0),
-          decoration: BoxDecoration(color: Colors.grey[200]),
-          child: ClipRRect(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10.0),
-                  color: schoolColor,
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Padding(
-                            padding: const EdgeInsets.all(2.0),
-                            child: Text(
-                              item.subject,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 13,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                              maxLines: 3,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  color: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16.0,
-                    vertical: 10.0,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (item.teacher.isNotEmpty)
-                        Row(
-                          children: [
-                            const Icon(Icons.person, size: 16),
-                            const SizedBox(width: 8.0),
-                            Text(
-                              item.teacher,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Colors.black,
-                              ),
-                            ),
-                          ],
-                        ),
-                      const SizedBox(height: 4),
-                      if (item.room.isNotEmpty)
-                        Row(
-                          children: [
-                            const Icon(Icons.meeting_room, size: 16),
-                            const SizedBox(width: 8.0),
-                            Text(
-                              item.room,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Colors.black,
-                              ),
-                            ),
-                          ],
-                        ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          const Icon(Icons.access_time, size: 16),
-                          const SizedBox(width: 8.0),
-                          Text(
-                            '${item.start} - ${item.end}',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Colors.black,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+/// One card per day: a heading, then a row per class (time column, subject, teacher and room).
+class _DayCard extends StatelessWidget {
+  const _DayCard({required this.title, required this.items, required this.accent});
+
+  final String title;
+  final List<SchedItem> items;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = ShadTheme.of(context);
+    return AppCard(
+      padding: Gap.card,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: theme.textTheme.large),
+          for (final item in items) ...[
+            Gap.hMd,
+            Divider(height: 1, color: theme.colorScheme.border),
+            Gap.hMd,
+            _ClassRow(item: item, accent: accent),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ClassRow extends StatelessWidget {
+  const _ClassRow({required this.item, required this.accent});
+
+  final SchedItem item;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = ShadTheme.of(context).textTheme;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 76,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(item.start, style: text.small.copyWith(fontWeight: FontWeight.w600)),
+              Text(item.end, style: text.muted),
+            ],
           ),
-        );
-      },
+        ),
+        Gap.wMd,
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                item.subject,
+                style: text.p.copyWith(fontWeight: FontWeight.w600),
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+              if (item.teacher.isNotEmpty || item.room.isNotEmpty) Gap.hXs,
+              if (item.teacher.isNotEmpty)
+                _Meta(icon: LucideIcons.user, text: item.teacher, color: accent),
+              if (item.room.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: Gap.xs),
+                  child: _Meta(icon: LucideIcons.doorOpen, text: item.room, color: accent),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Small icon + muted text line. Wraps instead of clipping.
+class _Meta extends StatelessWidget {
+  const _Meta({required this.icon, required this.text, required this.color});
+
+  final IconData icon;
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = ShadTheme.of(context);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Icon(icon, size: IconSize.inline, color: color),
+        ),
+        Gap.wSm,
+        Flexible(child: Text(text, style: theme.textTheme.muted)),
+      ],
+    );
+  }
+}
+
+/// Labelled shadcn select. Rebuilds when [value] changes from outside (year changes the
+/// semester), because [ShadSelect] only reads its initial value once.
+class _FieldSelect extends StatelessWidget {
+  const _FieldSelect({
+    required this.label,
+    required this.value,
+    required this.options,
+    required this.onChanged,
+  });
+
+  final String label;
+  final String? value;
+  final List<(String, String)> options;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = ShadTheme.of(context).textTheme;
+    String labelOf(String v) {
+      for (final o in options) {
+        if (o.$1 == v) return o.$2;
+      }
+      return v;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: text.small),
+        Gap.hXs,
+        LayoutBuilder(
+          builder: (context, constraints) => ShadSelect<String>(
+            key: ValueKey('$label-$value-${options.length}'),
+            minWidth: constraints.maxWidth,
+            maxWidth: constraints.maxWidth,
+            placeholder: Text('Select ${label.toLowerCase()}'),
+            initialValue: value,
+            options: [
+              for (final o in options) ShadOption<String>(value: o.$1, child: Text(o.$2)),
+            ],
+            selectedOptionBuilder: (context, v) =>
+                Text(labelOf(v), maxLines: 1, overflow: TextOverflow.ellipsis),
+            onChanged: (v) {
+              if (v != null) onChanged(v);
+            },
+          ),
+        ),
+      ],
     );
   }
 }

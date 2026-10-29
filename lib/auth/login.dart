@@ -1,21 +1,30 @@
+import 'package:pushtrial/api/auth_token.dart';
+import 'dart:convert';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:pushtrial/push_notifications.dart';
-import 'dart:convert';
+import 'package:pushtrial/services/firebase_push.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pushtrial/api/api.dart';
 import '../models/user.dart';
 import '../models/login.dart';
 import 'package:pushtrial/models/school_info.dart';
-import 'package:loading_animation_widget/loading_animation_widget.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 import '../schools/screens/schools.dart';
+import '../widgets/ui/ui.dart';
 
 class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
+
   @override
-  _LoginState createState() => _LoginState();
+  State<LoginScreen> createState() => _LoginState();
 }
 
 class _LoginState extends State<LoginScreen> {
+  static const _brandRed = Color(0xFFD71920); // fallback when school colour is missing
+
   final _formKey = GlobalKey<FormState>();
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -23,18 +32,21 @@ class _LoginState extends State<LoginScreen> {
   String? picurl;
   String? pic;
   bool _obscureText = true;
-  Future<String?> host = CallApi().getImage();
   List<SchoolInfo> schoolInfo = [];
 
   bool loading = true;
+  bool _isSubmitting = false;
 
-  Color schoolColor = Color.fromARGB(0, 255, 255, 255);
+  Color schoolColor = _brandRed;
 
   Color hexToColor(String hexString) {
-    final buffer = StringBuffer();
-    if (hexString.length == 7 || hexString.length == 9) buffer.write('ff');
-    buffer.write(hexString.replaceFirst('#', ''));
-    return Color(int.parse(buffer.toString(), radix: 16));
+    final hex = hexString.replaceFirst('#', '');
+    final value = hex.length == 6 ? 'FF$hex' : hex;
+    if (value.length != 8) return _brandRed;
+    final parsed = int.tryParse(value, radix: 16);
+    if (parsed == null) return _brandRed;
+    final color = Color(parsed);
+    return color.a == 0 ? _brandRed : color;
   }
 
   void _togglePasswordVisibility() {
@@ -46,20 +58,23 @@ class _LoginState extends State<LoginScreen> {
   Future<void> getSchoolInfo() async {
     try {
       final response = await CallApi().getSchoolInfo();
-      print("Response body: ${response.body}");
       final parsedResponse = json.decode(response.body);
-      if (parsedResponse is List) {
-        setState(() {
-          schoolInfo = parsedResponse
-              .map((model) => SchoolInfo.fromJson(model))
-              .toList()
-              .cast<SchoolInfo>();
-          schoolColor = hexToColor(schoolInfo[0].schoolcolor);
-          picurl = schoolInfo[0].picurl;
-        });
+      if (response.statusCode != 200 ||
+          parsedResponse is! List ||
+          parsedResponse.isEmpty) {
+        throw Exception('School information unavailable');
       }
-    } catch (e) {
-      print("Error fetching school info: $e");
+      final info = parsedResponse
+          .map((model) => SchoolInfo.fromJson(model))
+          .toList();
+      if (!mounted) return;
+      setState(() {
+        schoolInfo = info;
+        schoolColor = hexToColor(info.first.schoolcolor);
+        picurl = info.first.picurl;
+      });
+    } catch (_) {
+      if (!mounted) return;
       _showErrorDialog(
         'Thank you for your patience. This school is currently undergoing setup and is not accessible at this time. Please choose another school to proceed.',
       );
@@ -67,22 +82,22 @@ class _LoginState extends State<LoginScreen> {
   }
 
   void _showErrorDialog(String message) {
-    showDialog(
+    showShadDialog(
       context: context,
       builder: (BuildContext context) {
-        return AlertDialog(
-          title: Center(child: const Text('Unavailable')),
-          content: Text(message),
+        return ShadDialog.alert(
+          title: const Text('School unavailable'),
+          description: Text(message),
           actions: [
-            TextButton(
+            ShadButton(
               onPressed: () {
                 Navigator.of(context).pop();
                 Navigator.pushReplacement(
                   context,
-                  MaterialPageRoute(builder: (context) => SchoolScreen()),
+                  MaterialPageRoute(builder: (context) => const SchoolScreen()),
                 );
               },
-              child: const Text('Close'),
+              child: const Text('Choose another school'),
             ),
           ],
         );
@@ -98,18 +113,15 @@ class _LoginState extends State<LoginScreen> {
   Future<void> _loadSelectedSchool() async {
     String? selectedSchool = await getSchool();
 
-    if (selectedSchool != null) {
-      print('Loaded school eslink: $selectedSchool');
-    } else {
-      print('No school found in preferences.');
-    }
-
     pic = selectedSchool;
   }
 
   Future<void> _login() async {
+    if (_isSubmitting) return;
     if (_formKey.currentState?.validate() ?? false) {
-      final username = _usernameController.text;
+      FocusScope.of(context).unfocus();
+      setState(() => _isSubmitting = true);
+      final username = _usernameController.text.trim();
       final password = _passwordController.text;
 
       try {
@@ -126,6 +138,14 @@ class _LoginState extends State<LoginScreen> {
               final Login userLogin = Login.fromJson(responseData['userlogin']);
               final prefs = await SharedPreferences.getInstance();
 
+              // A v2 server signs the phone in with a token; a v1 server has none.
+              final issued = responseData['token'];
+              if (issued is String && issued.isNotEmpty) {
+                await AuthToken.save(issued);
+              } else {
+                await AuthToken.clear();
+              }
+
               await prefs.setString('user', jsonEncode(user.toJson()));
               await prefs.setString(
                 'studid',
@@ -136,11 +156,17 @@ class _LoginState extends State<LoginScreen> {
                 jsonEncode(userLogin.toJson()),
               );
 
-              String? token = await PushNotifications.getFCMToken();
-              if (token != null) {
-                await _callApi.getSaveToken(user.id, userLogin.type, token);
+              // Only when Firebase push is in use for this phone (a school whose server has no app
+              // alerts yet) is a push token requested and saved; FirebasePush decides after sign-in
+              // for a school that hasn't been seen before.
+              if (FirebasePush.isActive) {
+                String? token = await PushNotifications.getFCMToken();
+                if (token != null) {
+                  await _callApi.getSaveToken(user.id, userLogin.type, token);
+                }
               }
 
+              if (!mounted) return;
               Navigator.pushReplacementNamed(context, '/home', arguments: user);
             } else {
               _showSnackBar('Incorrect username or password');
@@ -151,13 +177,16 @@ class _LoginState extends State<LoginScreen> {
         } else if (response.statusCode == 400) {
           _showSnackBar('Bad request. Please check your input.');
         } else if (response.statusCode == 401) {
-          _showSnackBar('Unauthorized. Please check your credentials.');
+          _showSnackBar('Incorrect username or password.');
+        } else if (response.statusCode == 429) {
+          _showSnackBar('Too many attempts. Please wait a few minutes and try again.');
         } else {
           _showSnackBar('Failed to login. Please try again.');
         }
-      } catch (e) {
-        print('Error: $e');
+      } catch (_) {
         _showSnackBar('An error occurred. Please try again.');
+      } finally {
+        if (mounted) setState(() => _isSubmitting = false);
       }
     }
   }
@@ -172,17 +201,17 @@ class _LoginState extends State<LoginScreen> {
     setState(() {
       loading = true;
     });
-    await getSchoolInfo();
     await _loadSelectedSchool();
+    await getSchoolInfo();
 
-    setState(() {
-      loading = false;
-    });
+    if (mounted) setState(() => loading = false);
   }
 
   void _showSnackBar(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ShadToaster.of(
+      context,
+    ).show(ShadToast.destructive(description: Text(message)));
   }
 
   @override
@@ -192,166 +221,238 @@ class _LoginState extends State<LoginScreen> {
     super.dispose();
   }
 
+  void _changeSchool() {
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (context) => const SchoolScreen()),
+      );
+    }
+  }
+
+  Widget _buildSchoolLogo() {
+    final fallback = Icon(
+      LucideIcons.graduationCap,
+      color: ShadTheme.of(context).colorScheme.primary,
+      size: 48,
+    );
+    if (picurl == null || picurl!.trim().isEmpty || pic == null) return fallback;
+    // Same address the app has always used: the school's domain followed by the stored path.
+    // Uri.resolve would rewrite paths such as "../images/logo.png", so join them as text.
+    final path = picurl!.trim();
+    final url = path.startsWith('http')
+        ? path
+        : '${pic!.endsWith('/') ? pic : '$pic/'}${path.replaceFirst(RegExp(r'^/+'), '')}';
+    return CachedNetworkImage(
+      imageUrl: Uri.encodeFull(url),
+      fit: BoxFit.contain,
+      placeholder: (context, url) => fallback,
+      errorWidget: (context, url, error) => fallback,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: loading
-          ? const Center(
-              child: CircularProgressIndicator(semanticsLabel: 'Loading...'),
-            )
-          : Center(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.only(left: 50, right: 50),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Column(
-                        children: <Widget>[
-                          const SizedBox(height: 5),
-                          (picurl != null && picurl!.isNotEmpty)
-                              ? CachedNetworkImage(
-                                  imageUrl: "$pic$picurl",
-                                  placeholder: (context, url) => const Center(
-                                    child: CircularProgressIndicator(),
+    final theme = ShadTheme.of(context);
+    final scheme = theme.colorScheme;
+    final text = theme.textTheme;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
+    final schoolName = schoolInfo.isEmpty
+        ? 'Your school'
+        : schoolInfo.first.schoolname.trim();
+
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
+      child: Scaffold(
+        backgroundColor: scheme.background,
+        body: SafeArea(
+          child: loading
+              ? const LoadingSkeleton(cards: 2)
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(
+                    Gap.lg,
+                    Gap.lg,
+                    Gap.lg,
+                    Gap.xxl,
+                  ),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 460),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                width: 32,
+                                height: 32,
+                                decoration: BoxDecoration(
+                                  color: scheme.primary,
+                                  borderRadius: theme.radius,
+                                ),
+                                child: Icon(
+                                  LucideIcons.graduationCap,
+                                  color: scheme.primaryForeground,
+                                  size: IconSize.row,
+                                ),
+                              ),
+                              Gap.wSm,
+                              Text('Essentiel', style: text.large),
+                              const Spacer(),
+                              ShadButton.ghost(
+                                onPressed: _changeSchool,
+                                size: ShadButtonSize.sm,
+                                child: const Text('Change school'),
+                              ),
+                            ],
+                          ),
+                          if (!keyboardOpen) ...[
+                            Gap.hXxl,
+                            Center(
+                              child: Container(
+                                width: 112,
+                                height: 112,
+                                padding: const EdgeInsets.all(Gap.md),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(28),
+                                  border: Border.all(
+                                    color: schoolColor.withValues(alpha: 0.25),
+                                    width: 1.5,
                                   ),
-                                  errorWidget: (context, url, error) =>
-                                      const Icon(Icons.error, size: 70),
-                                  imageBuilder: (context, imageProvider) =>
-                                      Container(
-                                        width: 200,
-                                        height: 200,
-                                        decoration: BoxDecoration(
-                                          image: DecorationImage(
-                                            image: imageProvider,
-                                            fit: BoxFit.cover,
-                                          ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: schoolColor.withValues(alpha: 0.15),
+                                      blurRadius: 24,
+                                      offset: const Offset(0, 8),
+                                    ),
+                                  ],
+                                ),
+                                child: _buildSchoolLogo(),
+                              ),
+                            ),
+                            Gap.hLg,
+                            Text(
+                              schoolName.isEmpty ? 'Your school' : schoolName,
+                              textAlign: TextAlign.center,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: text.h4,
+                            ),
+                            Gap.hXs,
+                            Text(
+                              'Student portal',
+                              textAlign: TextAlign.center,
+                              style: text.muted,
+                            ),
+                            Gap.hXl,
+                          ] else
+                            Gap.hLg,
+                          ShadCard(
+                            padding: const EdgeInsets.all(Gap.xl),
+                            child: Form(
+                              key: _formKey,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('Welcome back', style: text.h3),
+                                  Gap.hXs,
+                                  Text(
+                                    'Sign in to access your student account.',
+                                    style: text.muted,
+                                  ),
+                                  Gap.hXl,
+                                  Text('Username', style: text.small),
+                                  Gap.hSm,
+                                  ShadInputFormField(
+                                    controller: _usernameController,
+                                    textInputAction: TextInputAction.next,
+                                    autofillHints: const [
+                                      AutofillHints.username,
+                                    ],
+                                    placeholder: const Text(
+                                      'Enter your username',
+                                    ),
+                                    leading: const Icon(
+                                      LucideIcons.user,
+                                      size: IconSize.row,
+                                    ),
+                                    validator: (value) => value.trim().isEmpty
+                                        ? 'Please enter your username'
+                                        : null,
+                                  ),
+                                  Gap.hLg,
+                                  Text('Password', style: text.small),
+                                  Gap.hSm,
+                                  ShadInputFormField(
+                                    controller: _passwordController,
+                                    obscureText: _obscureText,
+                                    textInputAction: TextInputAction.done,
+                                    autofillHints: const [
+                                      AutofillHints.password,
+                                    ],
+                                    onSubmitted: (_) => _login(),
+                                    placeholder: const Text(
+                                      'Enter your password',
+                                    ),
+                                    leading: const Icon(
+                                      LucideIcons.lock,
+                                      size: IconSize.row,
+                                    ),
+                                    trailing: Tooltip(
+                                      message: _obscureText
+                                          ? 'Show password'
+                                          : 'Hide password',
+                                      child: ShadButton.ghost(
+                                        onPressed: _togglePasswordVisibility,
+                                        child: Icon(
+                                          _obscureText
+                                              ? LucideIcons.eye
+                                              : LucideIcons.eyeOff,
+                                          color: scheme.mutedForeground,
+                                          size: IconSize.row,
                                         ),
                                       ),
-                                )
-                              : const SizedBox(
-                                  width: 200,
-                                  height: 200,
-                                  child: Icon(Icons.error),
-                                ),
+                                    ),
+                                    validator: (value) => value.isEmpty
+                                        ? 'Please enter your password'
+                                        : null,
+                                  ),
+                                  Gap.hXl,
+                                  ShadButton(
+                                    onPressed: _isSubmitting ? null : _login,
+                                    enabled: !_isSubmitting,
+                                    width: double.infinity,
+                                    height: kMinTap + 4,
+                                    backgroundColor: schoolColor,
+                                    foregroundColor:
+                                        schoolColor.computeLuminance() > 0.6
+                                        ? Colors.black
+                                        : Colors.white,
+                                    child: _isSubmitting
+                                        ? SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2.3,
+                                              color: scheme.primaryForeground,
+                                            ),
+                                          )
+                                        : const Text('Sign in'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
                         ],
                       ),
-                      const SizedBox(height: 20),
-                      const Text(
-                        'STUDENT PORTAL',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          fontFamily: "Poppins",
-                        ),
-                      ),
-                      const SizedBox(height: 25),
-                      TextFormField(
-                        controller: _usernameController,
-                        decoration: InputDecoration(
-                          labelText: 'Username',
-                          labelStyle: TextStyle(fontSize: 12),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8.0),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderSide: BorderSide(color: schoolColor),
-                            borderRadius: BorderRadius.circular(8.0),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderSide: BorderSide(color: Colors.grey),
-                            borderRadius: BorderRadius.circular(8.0),
-                          ),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Please enter your username';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _passwordController,
-                        obscureText: _obscureText,
-                        decoration: InputDecoration(
-                          labelText: 'Password',
-                          labelStyle: TextStyle(fontSize: 12),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8.0),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderSide: BorderSide(color: schoolColor),
-                            borderRadius: BorderRadius.circular(8.0),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderSide: BorderSide(color: Colors.grey),
-                            borderRadius: BorderRadius.circular(8.0),
-                          ),
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              _obscureText
-                                  ? Icons.visibility
-                                  : Icons.visibility_off,
-                              color: Colors.grey,
-                            ),
-                            onPressed: _togglePasswordVisibility,
-                          ),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Please enter your password';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 30),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: _login,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: schoolColor,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                          child: const Text(
-                            'LOGIN',
-                            style: TextStyle(color: Colors.white),
-                          ),
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(top: 50.0),
-                        child: InkWell(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => SchoolScreen(),
-                              ),
-                            );
-                          },
-                          splashColor: schoolColor.withOpacity(0.3),
-                          child: Text(
-                            'Select School',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              fontFamily: "Poppins",
-                              color: schoolColor,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
-              ),
-            ),
+        ),
+      ),
     );
   }
 }

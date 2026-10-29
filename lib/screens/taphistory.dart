@@ -1,14 +1,12 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pushtrial/models/user.dart';
 import 'package:pushtrial/models/user_data.dart';
-import 'package:pushtrial/models/school_info.dart';
 import 'package:pushtrial/models/taphistory.dart';
-import 'package:pushtrial/models/year_sem.dart';
 import 'package:pushtrial/api/api.dart';
-import 'package:dropdown_button2/dropdown_button2.dart';
+import 'package:pushtrial/widgets/ui/ui.dart';
 
 class TapHistoryScreen extends StatefulWidget {
   const TapHistoryScreen({super.key});
@@ -18,42 +16,42 @@ class TapHistoryScreen extends StatefulWidget {
 }
 
 class _TapHistoryScreenState extends State<TapHistoryScreen> {
+
+  // Slow responses can finish after the screen was closed; skip the update then.
+  @override
+  void setState(VoidCallback fn) {
+    if (mounted) super.setState(fn);
+  }
+  static const _months = [
+    'ALL',
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ];
+  static const _states = ['ALL', 'IN', 'OUT'];
+
   int studid = 0;
   User user = UserData.myUser;
-  List<SchoolInfo> schoolInfo = [];
   List<TapHistory> tapHistory = [];
   List<TapHistory> filteredTapHistory = [];
   String selectedMonth = 'ALL';
   String selectedWeek = 'ALL';
   String selectedState = 'ALL';
-  Color schoolColor = Color.fromARGB(0, 255, 255, 255);
-
-  Color hexToColor(String hexString) {
-    final buffer = StringBuffer();
-    if (hexString.length == 7 || hexString.length == 9) buffer.write('ff');
-    buffer.write(hexString.replaceFirst('#', ''));
-    return Color(int.parse(buffer.toString(), radix: 16));
-  }
+  bool loading = true;
 
   @override
   void initState() {
     super.initState();
-    getSchoolInfo();
     getUser();
-  }
-
-  Future<void> getSchoolInfo() async {
-    final response = await CallApi().getSchoolInfo();
-    final parsedResponse = json.decode(response.body);
-    if (parsedResponse is List) {
-      setState(() {
-        schoolInfo = parsedResponse
-            .map((model) => SchoolInfo.fromJson(model))
-            .toList()
-            .cast<SchoolInfo>();
-        schoolColor = hexToColor(schoolInfo[0].schoolcolor);
-      });
-    }
   }
 
   Future<void> getUser() async {
@@ -65,16 +63,20 @@ class _TapHistoryScreenState extends State<TapHistoryScreen> {
   }
 
   Future<void> getTapHistory() async {
-    final response = await CallApi().getTapHistory(studid);
-    final parsedResponse = json.decode(response.body);
-    if (parsedResponse is List) {
-      setState(() {
-        tapHistory = parsedResponse
-            .map((model) => TapHistory.fromJson(model))
-            .toList()
-            .cast<TapHistory>();
-        filterTapHistory();
-      });
+    try {
+      final response = await CallApi().getTapHistory(studid);
+      final parsedResponse = json.decode(response.body);
+      if (parsedResponse is List) {
+        setState(() {
+          tapHistory = parsedResponse
+              .map((model) => TapHistory.fromJson(model))
+              .toList()
+              .cast<TapHistory>();
+          filterTapHistory();
+        });
+      }
+    } finally {
+      if (mounted) setState(() => loading = false);
     }
   }
 
@@ -103,279 +105,152 @@ class _TapHistoryScreenState extends State<TapHistoryScreen> {
     });
   }
 
-  @override
-  Widget build(BuildContext context) {
-    filteredTapHistory.sort((a, b) => b.tdate.compareTo(a.tdate));
-
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        automaticallyImplyLeading: false,
-        title: Text(
-          'TAP HISTORY',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: schoolColor,
+  Widget _filters() {
+    return Row(
+      children: [
+        Expanded(
+          flex: 3,
+          child: ShadSelect<String>(
+            initialValue: selectedMonth,
+            placeholder: const Text('Month'),
+            options: [
+              for (final month in _months)
+                ShadOption(
+                  value: month,
+                  child: Text(month == 'ALL' ? 'All months' : month),
+                ),
+            ],
+            selectedOptionBuilder: (context, value) =>
+                Text(value == 'ALL' ? 'All months' : value),
+            onChanged: (value) {
+              if (value == null) return;
+              selectedMonth = value;
+              filterTapHistory();
+            },
           ),
         ),
-        centerTitle: true,
-      ),
-      body: tapHistory.isEmpty
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(30),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Image.asset('assets/search1.png'),
-                    const SizedBox(height: 10.0),
-                    Text(
-                      "No tap records found",
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        color: schoolColor,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
+        Gap.wSm,
+        Expanded(
+          flex: 2,
+          child: ShadSelect<String>(
+            initialValue: selectedState,
+            placeholder: const Text('Status'),
+            options: [
+              for (final state in _states)
+                ShadOption(
+                  value: state,
+                  child: Text(state == 'ALL' ? 'All taps' : state),
                 ),
-              ),
-            )
-          : Padding(
-              padding: const EdgeInsets.all(15),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        flex: 3,
-                        child: DropdownButtonFormField2<String>(
-                          isExpanded: true,
-                          hint: const Text(
-                            'Select Month',
-                            style: TextStyle(fontSize: 12),
-                          ),
-                          value: selectedMonth == 'ALL' ? null : selectedMonth,
-                          items:
-                              [
-                                'ALL',
-                                'January',
-                                'February',
-                                'March',
-                                'April',
-                                'May',
-                                'June',
-                                'July',
-                                'August',
-                                'September',
-                                'October',
-                                'November',
-                                'December',
-                              ].map((month) {
-                                return DropdownMenuItem<String>(
-                                  value: month,
-                                  child: Text(
-                                    month,
-                                    style: const TextStyle(fontSize: 12),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                );
-                              }).toList(),
-                          onChanged: (value) {
-                            setState(() {
-                              selectedMonth = value!;
-                              filterTapHistory();
-                            });
-                          },
-                          decoration: const InputDecoration(
-                            labelText: 'Month',
-                            labelStyle: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                            border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 4,
-                            ),
-                            isDense: true,
-                          ),
-                          buttonStyleData: const ButtonStyleData(
-                            padding: EdgeInsets.symmetric(horizontal: 8),
-                            height: 45,
-                          ),
-                          dropdownStyleData: DropdownStyleData(
-                            maxHeight: 300,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                          menuItemStyleData: const MenuItemStyleData(
-                            height: 40,
-                            padding: EdgeInsets.symmetric(horizontal: 12),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        flex: 2,
-                        child: DropdownButtonFormField2<String>(
-                          isExpanded: true,
-                          hint: const Text(
-                            'State',
-                            style: TextStyle(fontSize: 12),
-                          ),
-                          value: selectedState == 'ALL' ? null : selectedState,
-                          items: [
-                            DropdownMenuItem(
-                              value: 'ALL',
-                              child: const Text(
-                                'ALL',
-                                style: TextStyle(fontSize: 12),
-                              ),
-                            ),
-                            DropdownMenuItem(
-                              value: 'IN',
-                              child: const Text(
-                                'IN',
-                                style: TextStyle(fontSize: 12),
-                              ),
-                            ),
-                            DropdownMenuItem(
-                              value: 'OUT',
-                              child: const Text(
-                                'OUT',
-                                style: TextStyle(fontSize: 12),
-                              ),
-                            ),
-                          ],
-                          onChanged: (value) {
-                            setState(() {
-                              selectedState = value!;
-                              filterTapHistory();
-                            });
-                          },
-                          decoration: const InputDecoration(
-                            labelText: 'State',
-                            labelStyle: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                            border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 4,
-                            ),
-                            isDense: true,
-                          ),
-                          buttonStyleData: const ButtonStyleData(
-                            padding: EdgeInsets.symmetric(horizontal: 8),
-                            height: 45,
-                          ),
-                          dropdownStyleData: DropdownStyleData(
-                            maxHeight: 200,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                          menuItemStyleData: const MenuItemStyleData(
-                            height: 40,
-                            padding: EdgeInsets.symmetric(horizontal: 12),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
+            ],
+            selectedOptionBuilder: (context, value) =>
+                Text(value == 'ALL' ? 'All taps' : value),
+            onChanged: (value) {
+              if (value == null) return;
+              selectedState = value;
+              filterTapHistory();
+            },
+          ),
+        ),
+      ],
+    );
+  }
 
-                  Expanded(
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.vertical,
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(8.0),
-                        child: DataTable(
-                          headingTextStyle: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black87,
-                          ),
-
-                          dividerThickness: 1.0,
-                          columnSpacing: 20,
-                          columns: const [
-                            DataColumn(label: Text('STATE')),
-                            DataColumn(label: Text('TIME')),
-                            DataColumn(label: Text('DATE')),
-                          ],
-                          rows: filteredTapHistory.map((history) {
-                            final date = DateFormat(
-                              'yyyy-MM-dd',
-                            ).parse(history.tdate);
-                            final formattedDate = DateFormat(
-                              'MMMM dd, yyyy',
-                            ).format(date);
-                            final time = DateFormat(
-                              'HH:mm:ss',
-                            ).parse(history.ttime);
-                            final formattedTime = DateFormat(
-                              'hh:mm a',
-                            ).format(time);
-
-                            return DataRow(
-                              cells: [
-                                DataCell(
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 4.0,
-                                    ),
-                                    child: Text(
-                                      history.tapstate,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: history.tapstate == 'IN'
-                                            ? Colors.green
-                                            : Colors.red,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                DataCell(
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 4.0,
-                                    ),
-                                    child: Text(
-                                      formattedTime,
-                                      style: const TextStyle(fontSize: 12),
-                                    ),
-                                  ),
-                                ),
-                                DataCell(
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 4.0,
-                                    ),
-                                    child: Text(
-                                      formattedDate,
-                                      style: const TextStyle(fontSize: 12),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            );
-                          }).toList(),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+  Widget _tapRow(TapHistory history) {
+    final theme = ShadTheme.of(context);
+    final isIn = history.tapstate == 'IN';
+    return AppCard(
+      margin: const EdgeInsets.only(bottom: Gap.sm),
+      padding: const EdgeInsets.symmetric(horizontal: Gap.lg, vertical: Gap.md),
+      child: Row(
+        children: [
+          Icon(
+            isIn ? LucideIcons.logIn : LucideIcons.logOut,
+            size: IconSize.row,
+            color: theme.colorScheme.mutedForeground,
+          ),
+          Gap.wMd,
+          Expanded(
+            child: Text(
+              Fmt.time(history.ttime),
+              style: theme.textTheme.p.copyWith(fontWeight: FontWeight.w600),
             ),
+          ),
+          StatusBadge(
+            isIn ? 'In' : 'Out',
+            status: isIn ? AppStatus.success : AppStatus.info,
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _grouped() {
+    final items = <Widget>[];
+    String? currentDate;
+    for (final history in filteredTapHistory) {
+      if (history.tdate != currentDate) {
+        currentDate = history.tdate;
+        items.add(
+          SectionHeader(
+            Fmt.date(history.tdate),
+            topGap: items.isNotEmpty,
+          ),
+        );
+      }
+      items.add(_tapRow(history));
+    }
+    return items;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    filteredTapHistory.sort((a, b) {
+      final dateCompare = b.tdate.compareTo(a.tdate);
+      if (dateCompare != 0) return dateCompare;
+      final timeCompare = b.ttime.compareTo(a.ttime);
+      if (timeCompare != 0) return timeCompare;
+      return b.id.compareTo(a.id);
+    });
+
+    if (loading) {
+      return const AppPage(title: 'Tap history', body: LoadingSkeleton());
+    }
+
+    if (tapHistory.isEmpty) {
+      return AppPage(
+        title: 'Tap history',
+        onRefresh: getTapHistory,
+        children: const [
+          SizedBox(
+            height: 360,
+            child: EmptyState(
+              title: 'No tap records yet',
+              message: 'Your gate taps will show up here.',
+              icon: LucideIcons.badgeCheck,
+            ),
+          ),
+        ],
+      );
+    }
+
+    return AppPage(
+      title: 'Tap history',
+      onRefresh: getTapHistory,
+      children: [
+        _filters(),
+        Gap.hLg,
+        if (filteredTapHistory.isEmpty)
+          const SizedBox(
+            height: 280,
+            child: EmptyState(
+              title: 'No taps match these filters',
+              message: 'Try a different month or status.',
+              icon: LucideIcons.search,
+            ),
+          )
+        else
+          ..._grouped(),
+      ],
     );
   }
 }

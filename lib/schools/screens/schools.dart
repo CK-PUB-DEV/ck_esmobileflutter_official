@@ -1,1945 +1,417 @@
+import 'dart:convert';
+
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:pushtrial/auth/login.dart';
+import 'package:pushtrial/config/app_config.dart';
+import 'package:pushtrial/config/theme_controller.dart';
 import 'package:pushtrial/schools/api/school_api.dart';
 import 'package:pushtrial/schools/models/schools.dart';
-import 'dart:convert';
-import 'package:cached_network_image/cached_network_image.dart';
-import 'package:pushtrial/auth/login.dart';
+import 'package:pushtrial/widgets/ui/ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:loading_animation_widget/loading_animation_widget.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 
 class SchoolScreen extends StatefulWidget {
+  const SchoolScreen({super.key});
+
   @override
-  _SchoolScreenState createState() => _SchoolScreenState();
+  State<SchoolScreen> createState() => _SchoolScreenState();
 }
 
 class _SchoolScreenState extends State<SchoolScreen> {
+  final TextEditingController searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  final String host = SchoolApi().getImage();
   List<School> schoolNames = [];
   List<School> filteredSchoolNames = [];
-  String? selectedSchool;
-  String host = SchoolApi().getImage();
-  TextEditingController searchController = TextEditingController();
   bool loading = true;
+  bool hasLoadError = false;
+  bool selectingSchool = false;
 
   @override
   void initState() {
     super.initState();
-    _initializeData();
     searchController.addListener(_filterSchools);
+    _initializeData();
   }
 
-  Future<void> _initializeData() async {
+  Future<void> _initializeData({bool showLoading = true}) async {
     setState(() {
-      loading = true;
+      if (showLoading) loading = true;
+      hasLoadError = false;
     });
-
-    await getSchools();
-
-    setState(() {
-      loading = false;
-    });
+    try {
+      final list = await _loadSchoolList();
+      final schools = list.map((item) => School.fromJson(item)).toList()
+        ..sort((a, b) => a.schoolname.compareTo(b.schoolname));
+      if (!mounted) return;
+      setState(() {
+        schoolNames = schools;
+        filteredSchoolNames = _matchesQuery(schools);
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => hasLoadError = true);
+    } finally {
+      if (mounted && showLoading) setState(() => loading = false);
+    }
   }
 
-  Future<void> getSchools() async {
+  // The test list (passed in at build time, never bundled) is used only in test mode.
+  Future<Iterable> _loadSchoolList() async {
+    if (AppConfig.useTestSchools) {
+      return json.decode(AppConfig.testSchoolsJson) as List;
+    }
     final response = await SchoolApi().getSchoolList();
-
-   var dummyListMain = [
-  {
-    "id": 2,
-    "schoolabrv": "SJAES",
-    "schoolname": "ST. JOSEPH ACADEMY OF EL SALVADOR",
-    "eslink": "https://sjaes-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2022-11-22 11:08:37",
-    "updateddatetime": "2024-10-31 10:34:22",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1730342060.png",
-    "withSync": 0,
-    "projectsetup": 1,
-    "withmobile": 0,
-    "anydesk": "ONLINE",
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 0,
-    "tapping": "559637770",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 5,
-    "schoolabrv": "XAI",
-    "schoolname": "XAVIER ACADEMY OF INITAO",
-    "eslink": "http://xai-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2022-11-22 11:12:05",
-    "updateddatetime": "2024-10-31 14:47:10",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1730357229.png",
-    "withSync": 0,
-    "projectsetup": 1,
-    "withmobile": 0,
-    "anydesk": "226249367",
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 0,
-    "tapping": "TS XAI   OLD       - 333227460 |TS XAI NEW        - 1 642 670 601",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 7,
-    "schoolabrv": "HCHS",
-    "schoolname": "HOLY CROSS HIGH SCHOOL",
-    "eslink": "https://hchs-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2022-11-22 11:12:43",
-    "updateddatetime": "2024-12-17 13:34:45",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1734413684.png",
-    "withSync": 0,
-    "projectsetup": 2,
-    "withmobile": 0,
-    "anydesk": "1898380826",
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 0,
-    "tapping": "1814023708",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 8,
-    "schoolabrv": "SVA",
-    "schoolname": "SAINT VINCENT ACADEMY",
-    "eslink": "https://sva-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2022-11-22 11:13:15",
-    "updateddatetime": "2024-09-07 14:55:20",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1725692117.png",
-    "withSync": 0,
-    "projectsetup": 1,
-    "withmobile": 0,
-    "anydesk": "472748841",
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 0,
-    "tapping": "809179738",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 11,
-    "schoolabrv": "SNHS",
-    "schoolname": "ST. NINO HIGH SCHOOL",
-    "eslink": "https://snhs-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2022-11-22 11:14:55",
-    "updateddatetime": "2024-09-07 15:48:22",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1725695300.png",
-    "withSync": 0,
-    "projectsetup": 3,
-    "withmobile": 0,
-    "anydesk": "655415153",
-    "withps": 0,
-    "withgs": 0,
-    "withhs": 0,
-    "withshs": 0,
-    "withcollege": 0,
-    "tapping": "1229532217",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 12,
-    "schoolabrv": "FMCMA",
-    "schoolname": "FMC MA SCHOOL",
-    "eslink": "https://fmcma-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2022-11-22 11:16:54",
-    "updateddatetime": "2024-09-06 14:30:26",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1725604225.png",
-    "withSync": 0,
-    "projectsetup": 1,
-    "withmobile": 0,
-    "anydesk": "ONLINE",
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 0,
-    "tapping": "828479212",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 13,
-    "schoolabrv": "IA",
-    "schoolname": "IMMACULATE ACADEMY",
-    "eslink": "https://ia-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2022-11-22 11:17:08",
-    "updateddatetime": "2024-09-06 14:38:37",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1725604716.png",
-    "withSync": 0,
-    "projectsetup": 3,
-    "withmobile": 0,
-    "anydesk": "489567235",
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 0,
-    "tapping": "260786460",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 15,
-    "schoolabrv": "CMLC - BC",
-    "schoolname": "CENTERPHIL MONTESSORI LEARNING CENTER, INC. - BACOLOD",
-    "eslink": "https://cmlc-bc-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2022-11-22 11:18:36",
-    "updateddatetime": "2025-05-29 09:31:02",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1748482251.png",
-    "withSync": 0,
-    "projectsetup": 1,
-    "withmobile": 0,
-    "anydesk": "ONLINE",
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 0,
-    "tapping": "OLD 1349148189  NEW 1201304017",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 16,
-    "schoolabrv": "CMLC - ILO",
-    "schoolname": "CENTERPHIL MONTESSORI LEARNING CENTER, INC. - ILOILO",
-    "eslink": "https://cmlc-ilo-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2022-11-22 11:18:42",
-    "updateddatetime": "2024-10-29 15:21:22",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1730186454.png",
-    "withSync": 0,
-    "projectsetup": 1,
-    "withmobile": 0,
-    "anydesk": "ONLINE",
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 0,
-    "tapping": "107 930 916",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 17,
-    "schoolabrv": "DCFEA",
-    "schoolname": "DOANE CHRISTIAN FELLOWSHIP ACADEMY",
-    "eslink": "https://dcfea-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2022-11-22 11:19:02",
-    "updateddatetime": "2024-09-06 14:30:00",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1725604199.jpg",
-    "withSync": 0,
-    "projectsetup": 1,
-    "withmobile": 0,
-    "anydesk": "ONLINE",
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 0,
-    "tapping": "522244367",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 22,
-    "schoolabrv": "SJHSLI",
-    "schoolname": "ST. JOSEPH HIGH SCHOOL OF LALIGAN",
-    "eslink": "https://sjhsli-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2022-11-22 11:23:07",
-    "updateddatetime": "2024-09-07 15:46:43",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1725695201.png",
-    "withSync": 0,
-    "projectsetup": 2,
-    "withmobile": 0,
-    "anydesk": "493243054",
-    "withps": 0,
-    "withgs": 0,
-    "withhs": 0,
-    "withshs": 0,
-    "withcollege": 0,
-    "tapping": "160954409/1072262140",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 25,
-    "schoolabrv": "XDKHS",
-    "schoolname": "XAVIER DE KIBANGGAY HIGH SCHOOL",
-    "eslink": "http://xdkhs-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2022-11-22 11:24:31",
-    "updateddatetime": "2024-09-24 15:45:50",
-    "deleteddatetime": null,
-    "schoollogo": null,
-    "withSync": 0,
-    "projectsetup": 3,
-    "withmobile": 0,
-    "anydesk": "270734366",
-    "withps": 0,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 0,
-    "tapping": "133256938",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 29,
-    "schoolabrv": "LPHS",
-    "schoolname": "LA PURISIMA HIGH SCHOOL",
-    "eslink": "https://lphs-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2022-11-22 11:26:04",
-    "updateddatetime": "2025-12-05 13:42:24",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1730272074.png",
-    "withSync": 0,
-    "projectsetup": 3,
-    "withmobile": 0,
-    "anydesk": "179761286",
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 0,
-    "tapping": "384255867",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 31,
-    "schoolabrv": "VBCA",
-    "schoolname": "VALENCIA BAPTIST CHRISTIAN ACADEMY, INC.",
-    "eslink": "http://10.0.0.192:8000/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2022-11-22 11:26:57",
-    "updateddatetime": "2026-01-16 09:16:12",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1730357188.png",
-    "withSync": 0,
-    "projectsetup": 1,
-    "withmobile": 0,
-    "anydesk": "183351851",
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 0,
-    "tapping": "520785715",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 32,
-    "schoolabrv": "MAC",
-    "schoolname": "MARYKNOLL ACADEMY OF CATEEL",
-    "eslink": "https://mac-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2022-11-22 11:27:14",
-    "updateddatetime": "2025-09-01 15:04:52",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1742177234.png",
-    "withSync": 0,
-    "projectsetup": 1,
-    "withmobile": 0,
-    "anydesk": "892972584",
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 0,
-    "tapping": "1993503155 (new Main) / 2ND 1808741012",
-    "anydesk_ip": null,
-    "tapping_ip": "192.168.0.185"
-  },
-  {
-    "id": 33,
-    "schoolabrv": "MSMI",
-    "schoolname": "MARYKNOLL SCHOOL OF MANAY INC",
-    "eslink": "https://msmi-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2022-11-22 11:28:14",
-    "updateddatetime": "2025-08-01 11:26:33",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1754018792.png",
-    "withSync": 0,
-    "projectsetup": 1,
-    "withmobile": 0,
-    "anydesk": "855326330",
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 0,
-    "tapping": "105982966",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 34,
-    "schoolabrv": "MHSSI",
-    "schoolname": "MARYKNOLL HIGH SCHOOL OF SIGABOY INC",
-    "eslink": "https://mhssi-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2022-11-22 11:28:40",
-    "updateddatetime": "2024-12-17 13:54:04",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1734414843.png",
-    "withSync": 0,
-    "projectsetup": 3,
-    "withmobile": 0,
-    "anydesk": "957410550",
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 0,
-    "tapping": "218811569",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 35,
-    "schoolabrv": "MSL",
-    "schoolname": "MARYKNOLL SCHOOL OF LUPON",
-    "eslink": "https://msl-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2022-11-22 11:28:54",
-    "updateddatetime": "2025-06-20 14:57:37",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1750402578.jpg",
-    "withSync": 0,
-    "projectsetup": 3,
-    "withmobile": 0,
-    "anydesk": "541761266",
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 0,
-    "tapping": "393 713 986",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 37,
-    "schoolabrv": "DCC",
-    "schoolname": "DAVAO CENTRAL COLLEGE",
-    "eslink": "https://dcc-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2022-11-22 11:29:25",
-    "updateddatetime": "2025-08-11 08:02:06",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1752106534.png",
-    "withSync": 0,
-    "projectsetup": 2,
-    "withmobile": 0,
-    "anydesk": "1336189654",
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 1,
-    "tapping": "836559086 (Main) 659496857 (updated) / (Rasay) new(674109763)",
-    "anydesk_ip": "1336189654 1488330847 (old server)",
-    "tapping_ip": "192.168.103.240 (main)"
-  },
-  {
-    "id": 38,
-    "schoolabrv": "SPCT",
-    "schoolname": "SAINT PETER COLLEGE OF TORIL",
-    "eslink": "http://spct-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2022-11-22 11:29:46",
-    "updateddatetime": "2025-05-29 09:28:43",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1748482121.jpg",
-    "withSync": 0,
-    "projectsetup": 2,
-    "withmobile": 0,
-    "anydesk": "168128400",
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 1,
-    "tapping": "151977064 (Main) / 254833799 (GS)",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 42,
-    "schoolabrv": "HCB",
-    "schoolname": "HOLY CROSS OF BUNAWAN",
-    "eslink": "https://hcb-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2022-11-22 11:31:17",
-    "updateddatetime": "2025-07-18 08:44:11",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1730266113.jpg",
-    "withSync": 0,
-    "projectsetup": 1,
-    "withmobile": 0,
-    "anydesk": "ONLINE",
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 0,
-    "tapping": "864168383 (Front) / 1889184035 (Back)",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 44,
-    "schoolabrv": "HCCSI",
-    "schoolname": "HOLY CROSS COLLEGE OF SASA",
-    "eslink": "https://hccsi-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2022-11-22 11:31:40",
-    "updateddatetime": "2024-09-24 15:40:12",
-    "deleteddatetime": null,
-    "schoollogo": null,
-    "withSync": 0,
-    "projectsetup": 2,
-    "withmobile": 0,
-    "anydesk": "497949008",
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 1,
-    "tapping": null,
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 45,
-    "schoolabrv": "NDM",
-    "schoolname": "NOTRE DAME OF MLANG",
-    "eslink": "https://ndm-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2022-11-22 11:31:50",
-    "updateddatetime": "2025-08-06 08:56:42",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1730337180.png",
-    "withSync": 0,
-    "projectsetup": 2,
-    "withmobile": 0,
-    "anydesk": "727009920",
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 0,
-    "tapping": "532583399 / 1535072279 (new)",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 46,
-    "schoolabrv": "SBC",
-    "schoolname": "SOUTHERN BAPTIST COLLEGE",
-    "eslink": "http://sbc-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2022-11-22 11:32:15",
-    "updateddatetime": "2025-07-25 11:25:56",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1730186691.jpg",
-    "withSync": 0,
-    "projectsetup": 2,
-    "withmobile": 0,
-    "anydesk": "811880668",
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 1,
-    "tapping": "(MAIN)447002852 / (ELEM) 734285491",
-    "anydesk_ip": null,
-    "tapping_ip": "MAIN-192.168.95.5  /  ELEM-192.168.95.6"
-  },
-  {
-    "id": 47,
-    "schoolabrv": "NDSC",
-    "schoolname": "NOTRE DAME OF SALAMAN COLLEGE",
-    "eslink": "https://ndsc-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2022-11-22 11:32:30",
-    "updateddatetime": "2025-10-09 16:06:29",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1754018592.png",
-    "withSync": 0,
-    "projectsetup": 2,
-    "withmobile": 0,
-    "anydesk": "998158990",
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 1,
-    "tapping": "325180143 (2nd Tap)/ 1512947265 /1222155711",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 48,
-    "schoolabrv": "NDK",
-    "schoolname": "NOTRE DAME OF KALAMANSIG",
-    "eslink": "https://ndki-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2022-11-22 11:32:42",
-    "updateddatetime": "2025-10-01 13:56:57",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1730335801.jpg",
-    "withSync": 0,
-    "projectsetup": 3,
-    "withmobile": 0,
-    "anydesk": "113475197",
-    "withps": 0,
-    "withgs": 0,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 0,
-    "tapping": "451171994",
-    "anydesk_ip": null,
-    "tapping_ip": "192.168.0.226"
-  },
-  {
-    "id": 50,
-    "schoolabrv": "SJSFI",
-    "schoolname": "SAINT JOSEPH SCHOOL FOUNDATION INCORPORATED",
-    "eslink": "http://sjsfi-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2022-11-22 11:33:29",
-    "updateddatetime": "2024-10-31 10:59:39",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1730343578.png",
-    "withSync": 0,
-    "projectsetup": 1,
-    "withmobile": 0,
-    "anydesk": "328748433",
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 0,
-    "tapping": "590370842",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 51,
-    "schoolabrv": "APMC",
-    "schoolname": "AURORA PIONEERS MEMORIAL COLLEGE",
-    "eslink": "https://apmc-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2022-11-22 11:33:54",
-    "updateddatetime": "2024-10-29 15:23:25",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1730186602.png",
-    "withSync": 0,
-    "projectsetup": 1,
-    "withmobile": 0,
-    "anydesk": "ONLINE",
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 1,
-    "tapping": "369671661",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 52,
-    "schoolabrv": "CSL",
-    "schoolname": "CLARET SCHOOL OF LAMITAN",
-    "eslink": "https://app-csl.essentiel.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2022-11-22 11:34:41",
-    "updateddatetime": "2026-01-14 13:33:59",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1768368837.png",
-    "withSync": 0,
-    "projectsetup": 1,
-    "withmobile": 0,
-    "anydesk": "721231793",
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 0,
-    "tapping": "238474860/625780184",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 53,
-    "schoolabrv": "MC",
-    "schoolname": "MARIAN COLLEGE INC",
-    "eslink": "https://mc-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2022-11-22 11:35:27",
-    "updateddatetime": "2025-12-18 15:08:29",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1765485303.php",
-    "withSync": 0,
-    "projectsetup": 3,
-    "withmobile": 0,
-    "anydesk": "526877243",
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 1,
-    "tapping": "1490190956 (Front) / 746469810 (Back)",
-    "anydesk_ip": "https://essentiel.mariancollege.edu.ph/home",
-    "tapping_ip": null
-  },
-  {
-    "id": 54,
-    "schoolabrv": "HCBI",
-    "schoolname": "HOLY CROSS OF BABAK",
-    "eslink": "https://hcbi-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2022-11-22 11:35:42",
-    "updateddatetime": "2024-10-30 13:27:28",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1730266047.png",
-    "withSync": 0,
-    "projectsetup": 1,
-    "withmobile": 0,
-    "anydesk": "902908906",
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 0,
-    "tapping": "330396858",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 55,
-    "schoolabrv": "CISAT",
-    "schoolname": "CHILDREN'S INTEGRATED SCHOOL OF ALTA TIERRA,INC.",
-    "eslink": "https://cisat-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2022-11-22 11:36:06",
-    "updateddatetime": "2024-10-29 15:30:22",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1730187021.png",
-    "withSync": 0,
-    "projectsetup": 2,
-    "withmobile": 0,
-    "anydesk": "107496797",
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 0,
-    "tapping": "914961589",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 56,
-    "schoolabrv": "PCC",
-    "schoolname": "PILGRIM CHRISTIAN COLLEGE",
-    "eslink": "http://pcc-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2022-11-22 11:36:18",
-    "updateddatetime": "2025-05-29 09:07:47",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1748480866.jpg",
-    "withSync": 0,
-    "projectsetup": 1,
-    "withmobile": 0,
-    "anydesk": "ONLINE",
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 1,
-    "tapping": "Main (1078948486) Barrio (1332161117)",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 57,
-    "schoolabrv": "ICPS",
-    "schoolname": "IMMACULATE CONCEPTION PAROCHIAL SCHOOL",
-    "eslink": "https://icps-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2022-11-22 11:36:44",
-    "updateddatetime": "2024-12-17 13:35:58",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1734413752.png",
-    "withSync": 0,
-    "projectsetup": 3,
-    "withmobile": 0,
-    "anydesk": "136763093",
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 0,
-    "tapping": "914760642",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 58,
-    "schoolabrv": "SCPS",
-    "schoolname": "ST. CATHERINE PAROCHIAL SCHOOL",
-    "eslink": "http://scps-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2022-11-22 11:37:04",
-    "updateddatetime": "2025-05-29 09:30:09",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1748482202.jpg",
-    "withSync": 0,
-    "projectsetup": 1,
-    "withmobile": 0,
-    "anydesk": "700736762",
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 0,
-    "tapping": "825937066",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 60,
-    "schoolabrv": "MSLI",
-    "schoolname": "MARYKNOLL SCHOOL OF LAMBAJON",
-    "eslink": "https://app-msli.essentiel.ph/home",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2022-11-22 11:38:01",
-    "updateddatetime": "2025-10-24 17:15:19",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1750402578.jpg",
-    "withSync": 0,
-    "projectsetup": 1,
-    "withmobile": 0,
-    "anydesk": "1050225756  (old) /",
-    "withps": 0,
-    "withgs": 0,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 0,
-    "tapping": "1828640931 (old) / 1336802823",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 61,
-    "schoolabrv": "HOLYCROSS",
-    "schoolname": "Holy Cross High School of Camp Philips",
-    "eslink": "https://holycross-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2022-11-22 14:15:32",
-    "updateddatetime": "2026-01-16 09:25:26",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1750402525.png",
-    "withSync": 0,
-    "projectsetup": 2,
-    "withmobile": 0,
-    "anydesk": "1437036610",
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 0,
-    "tapping": "756821087",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 62,
-    "schoolabrv": "CSM",
-    "schoolname": "CLARET SCHOOL OF MALUSO, INC.",
-    "eslink": "https://csm-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2022-11-28 14:29:48",
-    "updateddatetime": "2025-06-20 14:52:52",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1750402372.png",
-    "withSync": 0,
-    "projectsetup": 3,
-    "withmobile": 0,
-    "anydesk": "830740692",
-    "withps": 0,
-    "withgs": 0,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 0,
-    "tapping": "1248309746 (Tap 1) / 1502196194 (Tap 2)",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 67,
-    "schoolabrv": "CCSA",
-    "schoolname": "CHRISTIAN COLLEGE OF SOUTHEAST ASIA",
-    "eslink": "https://ccsa-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2023-02-22 11:13:37",
-    "updateddatetime": "2024-10-29 15:28:49",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1730186928.jpg",
-    "withSync": 0,
-    "projectsetup": 2,
-    "withmobile": 0,
-    "anydesk": "Old : 549037317 New: 1330492825",
-    "withps": 0,
-    "withgs": 0,
-    "withhs": 0,
-    "withshs": 0,
-    "withcollege": 1,
-    "tapping": null,
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 68,
-    "schoolabrv": "PSSC",
-    "schoolname": "PASSIONIST SISTER SCHOOL OF CATMON",
-    "eslink": "https://app-pssc.essentiel.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2023-03-09 16:01:13",
-    "updateddatetime": "2025-12-23 14:40:33",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1730340140.png",
-    "withSync": 0,
-    "projectsetup": 1,
-    "withmobile": 0,
-    "anydesk": "627643498",
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 0,
-    "tapping": "711221844 (old) 1375854679 (new)",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 69,
-    "schoolabrv": "PAC",
-    "schoolname": "PHILIPPINE ADVENT COLLEGE, INC.",
-    "eslink": "https://pac-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2023-07-11 08:22:57",
-    "updateddatetime": "2025-08-01 11:27:05",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1754018822.png",
-    "withSync": 0,
-    "projectsetup": 2,
-    "withmobile": 0,
-    "anydesk": "1612800233",
-    "withps": 0,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 1,
-    "tapping": "Main - 1817238977 Second - 1053074216",
-    "anydesk_ip": null,
-    "tapping_ip": "MAIN - 192.168.24.151 SECOND - 192.168.24.131"
-  },
-  {
-    "id": 70,
-    "schoolabrv": "SPCMOI",
-    "schoolname": "ST. PETER'S COLLEGE OF MISAMIS ORIENTAL, INC.",
-    "eslink": "https://spcmoi-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2023-09-13 14:09:16",
-    "updateddatetime": "2025-10-15 14:16:36",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1750403348.png",
-    "withSync": 0,
-    "projectsetup": 2,
-    "withmobile": 0,
-    "anydesk": "371880971",
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 1,
-    "tapping": null,
-    "anydesk_ip": null,
-    "tapping_ip": "1418904136 (Elem)/1876121449 (Main)/1217244132 (An"
-  },
-  {
-    "id": 71,
-    "schoolabrv": "PMSC",
-    "schoolname": "PRESENTATION OF MARY SCHOOL OF CLARIN, INC.",
-    "eslink": "https://pmsc-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2023-09-25 09:11:33",
-    "updateddatetime": "2024-09-07 14:51:11",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1725691870.jpg",
-    "withSync": 0,
-    "projectsetup": 1,
-    "withmobile": 0,
-    "anydesk": "ONLINE",
-    "withps": 0,
-    "withgs": 1,
-    "withhs": 0,
-    "withshs": 0,
-    "withcollege": 0,
-    "tapping": "pmsctapping@ad",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 72,
-    "schoolabrv": "KDCI",
-    "schoolname": "Kidapawan Doctors College, Incorporated",
-    "eslink": "https://kdci-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2024-02-14 14:30:14",
-    "updateddatetime": "2024-12-17 13:36:56",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1734413814.jpg",
-    "withSync": 0,
-    "projectsetup": 2,
-    "withmobile": 0,
-    "anydesk": "1750315508",
-    "withps": 0,
-    "withgs": 0,
-    "withhs": 0,
-    "withshs": 1,
-    "withcollege": 1,
-    "tapping": "MAIN 1717520844 / ANNEX 1340639534",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 73,
-    "schoolabrv": "ICCBI",
-    "schoolname": "Immaculate Conception College of Balayan, Inc.",
-    "eslink": "https://iccbi-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2024-03-05 08:27:21",
-    "updateddatetime": "2025-05-29 09:06:58",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1748480719.png",
-    "withSync": 0,
-    "projectsetup": 1,
-    "withmobile": 0,
-    "anydesk": "1625735009",
-    "withps": 0,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 1,
-    "tapping": "FRONT - 1283621461 | BACK - 421818711",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 74,
-    "schoolabrv": "MDA",
-    "schoolname": "Mater Dei Academy of Tagaytay, Inc.",
-    "eslink": "https://mda-essentiel.ckgroup.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2024-04-02 15:17:51",
-    "updateddatetime": "2025-05-29 09:04:14",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1748480627.png",
-    "withSync": 0,
-    "projectsetup": 1,
-    "withmobile": 0,
-    "anydesk": null,
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 0,
-    "tapping": "1718253576",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 75,
-    "schoolabrv": "BJIT",
-    "schoolname": "BJ INSTITUTE OF TECHNOLOGY INC.",
-    "eslink": "https://app-bjit.essentiel.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2024-05-31 14:19:12",
-    "updateddatetime": "2024-11-06 16:06:47",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1730880406.png",
-    "withSync": 0,
-    "projectsetup": 1,
-    "withmobile": 0,
-    "anydesk": null,
-    "withps": 0,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 0,
-    "tapping": "1023763140",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 77,
-    "schoolabrv": "HCCC",
-    "schoolname": "HOLY CROSS COLLEGE OF CALINAN",
-    "eslink": "https://app-hccc.essentiel.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2024-07-10 10:58:55",
-    "updateddatetime": "2025-08-01 11:25:44",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1754018743.jpg",
-    "withSync": 0,
-    "projectsetup": 2,
-    "withmobile": 0,
-    "anydesk": "1349870509",
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 1,
-    "tapping": "1st tapping 957808371 (2nd Tapping 1410198906)",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 78,
-    "schoolabrv": "MHSNCI",
-    "schoolname": "MARYKNOLL HIGH SCHOOL OF NEW CORELLA, INC.",
-    "eslink": "https://app-mhsnci.essentiel.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2024-07-10 11:01:10",
-    "updateddatetime": "2024-09-06 15:11:57",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1725606717.png",
-    "withSync": 0,
-    "projectsetup": 1,
-    "withmobile": 0,
-    "anydesk": null,
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 1,
-    "tapping": "1876087949",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 79,
-    "schoolabrv": "GTC",
-    "schoolname": "Gabriel Taborin College",
-    "eslink": "https://app-taborin.essentiel.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2024-09-05 15:04:46",
-    "updateddatetime": "2025-11-20 09:29:24",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1748480307.png",
-    "withSync": 0,
-    "projectsetup": 1,
-    "withmobile": 0,
-    "anydesk": null,
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 0,
-    "tapping": null,
-    "anydesk_ip": null,
-    "tapping_ip": "1244516179"
-  },
-  {
-    "id": 84,
-    "schoolabrv": "AAB",
-    "schoolname": "Adventist Academy Bacolod Inc.",
-    "eslink": "https://app-aab.essentiel.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2024-10-24 08:31:36",
-    "updateddatetime": "2025-08-01 11:25:55",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1754018753.jpg",
-    "withSync": 0,
-    "projectsetup": 1,
-    "withmobile": 0,
-    "anydesk": null,
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 0,
-    "tapping": "455 477 237/ 792963321",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 85,
-    "schoolabrv": "BCC",
-    "schoolname": "BINALBAGAN CATHOLIC COLLEGE, INC.",
-    "eslink": "https://app-bcc.essentiel.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2024-10-30 10:21:38",
-    "updateddatetime": "2026-01-30 14:58:10",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1734413588.png",
-    "withSync": 0,
-    "projectsetup": 1,
-    "withmobile": 0,
-    "anydesk": null,
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 1,
-    "tapping": "1 990 799 740 (1516512695-new) (Main-1) 1 260 203 013 (Main-2) 1 526 421 65 7 (Main-3) 1823508370(Annex)",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 86,
-    "schoolabrv": "NSDLN",
-    "schoolname": "NUESTRA SEÑORA DE LAS NIEVES",
-    "eslink": "https://app-nsdls.essentiel.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2024-12-16 08:53:29",
-    "updateddatetime": "2025-10-27 15:44:03",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1750402809.jpg",
-    "withSync": 0,
-    "projectsetup": 1,
-    "withmobile": 0,
-    "anydesk": null,
-    "withps": 0,
-    "withgs": 0,
-    "withhs": 1,
-    "withshs": 0,
-    "withcollege": 0,
-    "tapping": "1465951096 (old) / 325072484 (new)",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 87,
-    "schoolabrv": "CSN",
-    "schoolname": "Cathedral School of La Naval, Inc.",
-    "eslink": "https://app-csn.essentiel.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2025-01-31 13:43:29",
-    "updateddatetime": "2025-06-20 14:54:21",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1750402458.jpg",
-    "withSync": 0,
-    "projectsetup": 1,
-    "withmobile": 0,
-    "anydesk": null,
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 0,
-    "tapping": null,
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 88,
-    "schoolabrv": "LDCU",
-    "schoolname": "CK Children's Publishing",
-    "eslink": "https://app-ldcu.essentiel.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2025-03-17 15:46:28",
-    "updateddatetime": "2025-06-18 16:54:09",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1750236844.jpg",
-    "withSync": 0,
-    "projectsetup": null,
-    "withmobile": 0,
-    "anydesk": null,
-    "withps": 0,
-    "withgs": 0,
-    "withhs": 0,
-    "withshs": 0,
-    "withcollege": 0,
-    "tapping": null,
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 89,
-    "schoolabrv": "STII",
-    "schoolname": "SIBUGAY TECHNICAL INSTITUTE, INC.",
-    "eslink": "https://app-stii.essentiel.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2025-04-10 10:27:21",
-    "updateddatetime": "2025-10-24 11:58:06",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1750403302.jpg",
-    "withSync": 0,
-    "projectsetup": 1,
-    "withmobile": 0,
-    "anydesk": null,
-    "withps": 0,
-    "withgs": 0,
-    "withhs": 0,
-    "withshs": 0,
-    "withcollege": 0,
-    "tapping": null,
-    "anydesk_ip": "MAIN 1-1320618669 / MAIN 2 - 1637471423 / AGRI - 1",
-    "tapping_ip": "AGRI - 1590527454 / SANITO - 1200890275"
-  },
-  {
-    "id": 90,
-    "schoolabrv": "ACFI",
-    "schoolname": "Arriesgado College Foundation, Inc",
-    "eslink": "https://app-acfi.essentiel.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2025-06-25 10:46:58",
-    "updateddatetime": "2025-11-15 15:26:16",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1763191537.png",
-    "withSync": 0,
-    "projectsetup": 1,
-    "withmobile": 0,
-    "anydesk": null,
-    "withps": 0,
-    "withgs": 0,
-    "withhs": 0,
-    "withshs": 0,
-    "withcollege": 0,
-    "tapping": null,
-    "anydesk_ip": "MAIN-1281654360 / TAP-2 -",
-    "tapping_ip": "1281654360"
-  },
-  {
-    "id": 91,
-    "schoolabrv": "LDCU-DISKLESS",
-    "schoolname": "LICEO",
-    "eslink": "https://app-ldcu.essentiel.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2025-08-04 10:27:33",
-    "updateddatetime": "2026-02-05 11:49:03",
-    "deleteddatetime": null,
-    "schoollogo": null,
-    "withSync": 0,
-    "projectsetup": 1,
-    "withmobile": 0,
-    "anydesk": "1112409778 / 1877563976 / 1894806123",
-    "withps": 0,
-    "withgs": 0,
-    "withhs": 0,
-    "withshs": 0,
-    "withcollege": 0,
-    "tapping": null,
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 92,
-    "schoolabrv": "FFCA",
-    "schoolname": "First Fruits Christian Academy",
-    "eslink": "https://app-ffca.essentiel.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2025-09-11 01:02:19",
-    "updateddatetime": "2025-11-15 14:02:32",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1763186544.jpg",
-    "withSync": 0,
-    "projectsetup": 1,
-    "withmobile": 0,
-    "anydesk": null,
-    "withps": 1,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 1,
-    "tapping": null,
-    "anydesk_ip": null,
-    "tapping_ip": "1281654360"
-  },
-  {
-    "id": 93,
-    "schoolabrv": "HCHSI",
-    "schoolname": "Holy Child High School Incorporated",
-    "eslink": "https://app-hchsi.essentiel.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2025-09-11 10:28:25",
-    "updateddatetime": "2025-12-12 14:26:07",
-    "deleteddatetime": null,
-    "schoollogo": null,
-    "withSync": 0,
-    "projectsetup": 1,
-    "withmobile": 0,
-    "anydesk": null,
-    "withps": 0,
-    "withgs": 1,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 0,
-    "tapping": null,
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 94,
-    "schoolabrv": "SFESUI",
-    "schoolname": "ST. FRANCIS EPISCOPAL SCHOOL OF UPI, INC.",
-    "eslink": "https://app-sfesui.essentiel.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2025-11-25 08:46:44",
-    "updateddatetime": "2025-12-03 13:47:50",
-    "deleteddatetime": null,
-    "schoollogo": "/schoollistlogo/1764031597.png",
-    "withSync": 0,
-    "projectsetup": 1,
-    "withmobile": 0,
-    "anydesk": null,
-    "withps": 0,
-    "withgs": 0,
-    "withhs": 1,
-    "withshs": 1,
-    "withcollege": 0,
-    "tapping": "1442639562",
-    "anydesk_ip": null,
-    "tapping_ip": null
-  },
-  {
-    "id": 97,
-    "schoolabrv": "SMJSI",
-    "schoolname": "SIBUGAY'S MATTHEW-JACKSON SCHOOL INC.",
-    "eslink": "https://essentiel.ph/",
-    "github_repo": null,
-    "deleted": 0,
-    "createdby": 0,
-    "updatedby": 0,
-    "deletedby": 0,
-    "createddatetime": "2025-12-10 15:16:36",
-    "updateddatetime": null,
-    "deleteddatetime": null,
-    "schoollogo": null,
-    "withSync": 0,
-    "projectsetup": 1,
-    "withmobile": 0,
-    "anydesk": null,
-    "withps": 0,
-    "withgs": 0,
-    "withhs": 0,
-    "withshs": 0,
-    "withcollege": 0,
-    "tapping": null,
-    "anydesk_ip": null,
-    "tapping_ip": null
+    if (response.statusCode != 200) {
+      throw Exception('Unable to load schools');
+    }
+    return json.decode(response.body.toString()) as List;
   }
-];
 
-    var dummyList = [
-     
-        {
-        "id": 31,
-        "schoolabrv": "VBCA",
-        "schoolname": "VALENCIA BAPTIST CHRISTIAN ACADEMY, INC.",
-        "eslink": "http://10.0.0.192:8000/",
-        "github_repo": null,
-        "deleted": 0,
-        "createdby": 0,
-        "updatedby": 0,
-        "deletedby": 0,
-        "createddatetime": "2022-11-22 11:26:57",
-        "updateddatetime": "2026-01-16 09:16:12",
-        "deleteddatetime": null,
-        "schoollogo": "/schoollistlogo/1730357188.png",
-        "withSync": 0,
-        "projectsetup": 1,
-        "withmobile": 0,
-        "anydesk": "183351851",
-        "withps": 1,
-        "withgs": 1,
-        "withhs": 1,
-        "withshs": 1,
-        "withcollege": 0,
-        "tapping": "520785715",
-        "anydesk_ip": null,
-        "tapping_ip": null
-      },
-
-      {
-        "id": 46,
-        "schoolabrv": "SBC",
-        "schoolname": "SOUTHERN BAPTIST COLLEGE",
-        // "eslink": "http://sbc-essentiel.ckgroup.ph/",
-        "eslink": "http://10.0.0.192:8000/",
-        "github_repo": null,
-        "deleted": 0,
-        "createdby": 0,
-        "updatedby": 0,
-        "deletedby": 0,
-        "createddatetime": "2022-11-22 11:32:15",
-        "updateddatetime": "2025-07-25 11:25:56",
-        "deleteddatetime": null,
-        "schoollogo": "/schoollistlogo/1730186691.jpg",
-        "withSync": 0,
-        "projectsetup": 2,
-        "withmobile": 0,
-        "anydesk": "811880668",
-        "withps": 1,
-        "withgs": 1,
-        "withhs": 1,
-        "withshs": 1,
-        "withcollege": 1,
-        "tapping": "(MAIN)447002852 / (ELEM) 734285491",
-        "anydesk_ip": null,
-        "tapping_ip": "MAIN-192.168.95.5  /  ELEM-192.168.95.6"
-      },
-      
-    ];
-
-    Iterable list = json.decode(response.body.toString());
-    // Iterable list = dummyList.map((item) => item as Map<String, dynamic>);
-
-    setState(() {
-      schoolNames = list.map((model) => School.fromJson(model)).toList();
-      schoolNames.sort((a, b) => a.schoolname.compareTo(b.schoolname));
-      filteredSchoolNames = schoolNames;
-      print('schoolNames: $schoolNames');
-    });
+  List<School> _matchesQuery(List<School> schools) {
+    final query = searchController.text.trim().toLowerCase();
+    if (query.isEmpty) return schools;
+    return schools.where((school) {
+      return school.schoolname.toLowerCase().contains(query) ||
+          school.schoolabrv.toLowerCase().contains(query);
+    }).toList();
   }
 
   void _filterSchools() {
-    final query = searchController.text.toLowerCase();
-    setState(() {
-      filteredSchoolNames = schoolNames
-          .where(
-            (school) =>
-                school.schoolname.toLowerCase().contains(query) ||
-                school.schoolabrv.toLowerCase().contains(query),
-          )
-          .toList();
-    });
+    if (_scrollController.hasClients) _scrollController.jumpTo(0);
+    setState(() => filteredSchoolNames = _matchesQuery(schoolNames));
   }
 
-  Future<void> _storeSelectedSchool(String eslink, String schoolVersion, int schoolId) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('selectedSchool', eslink);
-    await prefs.setString('schoolVersion', schoolVersion);
-    await prefs.setInt('selectedSchoolId', schoolId);
+  void _toast(String message) {
+    if (!mounted) return;
+    ShadToaster.of(context).show(ShadToast.destructive(description: Text(message)));
+  }
+
+  Future<void> _toggleTheme() async {
+    final controller = AppThemeController.instance;
+    final saved = await controller.setDark(!controller.isDark);
+    if (!saved) _toast('Could not save your appearance setting.');
+  }
+
+  Future<void> _selectSchool(School school) async {
+    if (selectingSchool) return;
+    if (school.eslink.isEmpty) {
+      _toast('This school is currently unavailable.');
+      return;
+    }
+    setState(() => selectingSchool = true);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('selectedSchool', AppConfig.secureUrl(school.eslink));
+      await prefs.setString('schoolVersion', school.schoolVersion);
+      await prefs.setInt('selectedSchoolId', school.id);
+      if (!mounted) return;
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => LoginScreen()),
+      );
+    } catch (_) {
+      _toast('Could not open this school. Please try again.');
+    } finally {
+      if (mounted) setState(() => selectingSchool = false);
+    }
   }
 
   @override
   void dispose() {
+    searchController.removeListener(_filterSchools);
     searchController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final height = MediaQuery.of(context).size.height;
-
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: Stack(
-        children: [
-          Column(
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
+      child: Scaffold(
+        backgroundColor: ShadTheme.of(context).colorScheme.background,
+        body: SafeArea(
+          child: Column(
             children: [
-              Container(
-                height: height * 0.4,
-                width: double.infinity,
-                color: Colors.white,
-                child: Image.asset('assets/2.webp', fit: BoxFit.contain),
-              ),
-
-              Expanded(
-                child: Container(
-                  width: double.infinity,
-                  decoration: const BoxDecoration(color: Colors.white),
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 20, right: 20),
-                    child: GridView.builder(
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            crossAxisSpacing: 10,
-                            mainAxisSpacing: 10,
-                            childAspectRatio: 1.0,
-                          ),
-                      itemCount: filteredSchoolNames.length,
-                      itemBuilder: (context, index) {
-                        final school = filteredSchoolNames[index];
-                        return GestureDetector(
-                          onTap: () async {
-                            setState(() {
-                              selectedSchool = school.eslink;
-                            });
-
-                            if (selectedSchool != null &&
-                                selectedSchool!.isNotEmpty) {
-                              await _storeSelectedSchool(selectedSchool!, school.schoolVersion, school.id);
-
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => LoginScreen(),
-                                ),
-                              );
-                            } else {
-                              print('Selected school is null or empty.');
-                            }
-                          },
-                          child: Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                ClipOval(
-                                  child: CachedNetworkImage(
-                                    imageUrl: "$host${school.schoollogo}",
-                                    width: 80,
-                                    height: 80,
-                                    placeholder: (context, url) =>
-                                        CircularProgressIndicator(),
-                                    errorWidget: (context, url, error) =>
-                                        Image.asset(
-                                          'assets/cklogo.png',
-                                          width: 80,
-                                          height: 80,
-                                          fit: BoxFit.cover,
-                                        ),
-                                    fit: BoxFit.cover,
-                                  ),
-                                ),
-                                const SizedBox(height: 10),
-                                Text(
-                                  school.schoolname,
-                                  style: const TextStyle(
-                                    color: Colors.black,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-              ),
+              _buildHeader(),
+              Expanded(child: _buildDirectory()),
             ],
           ),
-
-          Positioned(
-            top: height * 0.4 - 30,
-            left: 30,
-            right: 30,
-            child: Material(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              child: SizedBox(
-                height: 50,
-                child: TextFormField(
-                  controller: searchController,
-                  decoration: const InputDecoration(
-                    labelText: 'Search School',
-                    labelStyle: TextStyle(fontSize: 12),
-                    prefixIcon: Icon(Icons.search),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.all(Radius.circular(10.0)),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
+
+  Widget _buildHeader() {
+    final theme = ShadTheme.of(context);
+    final scheme = theme.colorScheme;
+    final text = theme.textTheme;
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1100),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(Gap.lg, Gap.lg, Gap.lg, Gap.sm),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              AnimatedSize(
+                duration: const Duration(milliseconds: 180),
+                alignment: Alignment.topCenter,
+                child: keyboardOpen
+                    ? const SizedBox.shrink()
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                width: 32,
+                                height: 32,
+                                decoration: BoxDecoration(
+                                  color: scheme.primary,
+                                  borderRadius: theme.radius,
+                                ),
+                                child: Icon(
+                                  LucideIcons.graduationCap,
+                                  color: scheme.primaryForeground,
+                                  size: IconSize.row,
+                                ),
+                              ),
+                              Gap.wSm,
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('Essentiel', style: text.large),
+                                    Text('Student portal', style: text.muted),
+                                  ],
+                                ),
+                              ),
+                              ListenableBuilder(
+                                listenable: AppThemeController.instance,
+                                builder: (context, child) => Semantics(
+                                  button: true,
+                                  label: AppThemeController.instance.isDark
+                                      ? 'Switch to light mode'
+                                      : 'Switch to dark mode',
+                                  child: ShadIconButton.outline(
+                                    onPressed: _toggleTheme,
+                                    icon: Icon(
+                                      AppThemeController.instance.isDark
+                                          ? LucideIcons.sun
+                                          : LucideIcons.moon,
+                                      size: IconSize.row,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          Gap.hXl,
+                          Text('Find your school', style: text.h2),
+                          Gap.hXs,
+                          Text(
+                            'Choose your school to continue to your student portal.',
+                            style: text.muted,
+                          ),
+                          Gap.hLg,
+                        ],
+                      ),
+              ),
+              ShadInput(
+                controller: searchController,
+                textInputAction: TextInputAction.search,
+                placeholder: const Text('Search schools'),
+                leading: const Icon(LucideIcons.search, size: IconSize.row),
+                trailing: searchController.text.isEmpty
+                    ? null
+                    : ShadButton.ghost(
+                        onPressed: searchController.clear,
+                        child: const Icon(
+                          LucideIcons.x,
+                          size: IconSize.inline,
+                        ),
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDirectory() {
+    final theme = ShadTheme.of(context);
+    final text = theme.textTheme;
+    if (loading) return const LoadingSkeleton();
+    if (hasLoadError) {
+      return ErrorState(
+        title: 'Could not load schools',
+        onRetry: _initializeData,
+      );
+    }
+    if (filteredSchoolNames.isEmpty) {
+      return Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          EmptyState(
+            icon: LucideIcons.searchX,
+            title: schoolNames.isEmpty
+                ? 'No schools available'
+                : 'No schools found',
+            message: schoolNames.isEmpty
+                ? 'Please check back later.'
+                : 'Try a different name or abbreviation.',
+          ),
+          if (searchController.text.isNotEmpty)
+            ShadButton.outline(
+              onPressed: searchController.clear,
+              child: const Text('Clear search'),
+            ),
+        ],
+      );
+    }
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1100),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth;
+            final columns = width >= 900
+                ? 4
+                : width >= 600
+                ? 3
+                : 2;
+            final textScale = MediaQuery.textScalerOf(context).scale(1);
+            return RefreshIndicator(
+              color: theme.colorScheme.primary,
+              onRefresh: () => _initializeData(showLoading: false),
+              child: CustomScrollView(
+                controller: _scrollController,
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: [
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(
+                      Gap.lg,
+                      Gap.md,
+                      Gap.lg,
+                      Gap.md,
+                    ),
+                    sliver: SliverToBoxAdapter(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Schools', style: text.large),
+                          Text(
+                            '${filteredSchoolNames.length} ${filteredSchoolNames.length == 1 ? 'school' : 'schools'}',
+                            style: text.muted,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(
+                      Gap.lg,
+                      0,
+                      Gap.lg,
+                      Gap.xl,
+                    ),
+                    sliver: SliverGrid.builder(
+                      itemCount: filteredSchoolNames.length,
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: columns,
+                        crossAxisSpacing: Gap.md,
+                        mainAxisSpacing: Gap.md,
+                        mainAxisExtent: 184 + (textScale - 1) * 80,
+                      ),
+                      itemBuilder: (context, index) =>
+                          _buildSchoolCard(filteredSchoolNames[index]),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSchoolCard(School school) {
+    final theme = ShadTheme.of(context);
+    final scheme = theme.colorScheme;
+    final text = theme.textTheme;
+    return Semantics(
+      button: true,
+      label: 'Open ${school.schoolname}',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: selectingSchool ? null : () => _selectSchool(school),
+        child: ShadCard(
+          padding: Gap.card,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                padding: const EdgeInsets.all(Gap.xs),
+                decoration: BoxDecoration(
+                  color: scheme.muted,
+                  borderRadius: theme.radius,
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(Gap.sm),
+                  child: school.schoollogo.isEmpty
+                      ? _fallbackLogo()
+                      : CachedNetworkImage(
+                          imageUrl: '$host${school.schoollogo}',
+                          fit: BoxFit.contain,
+                          placeholder: (context, url) => _fallbackLogo(),
+                          errorWidget: (context, url, error) => _fallbackLogo(),
+                        ),
+                ),
+              ),
+              Gap.hMd,
+              Text(
+                school.schoolname,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: text.small.copyWith(fontWeight: FontWeight.w600),
+              ),
+              const Spacer(),
+              Row(
+                children: [
+                  Expanded(
+                    child: ShadBadge.secondary(
+                      child: Text(
+                        school.schoolabrv.isEmpty ? 'School' : school.schoolabrv,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                  Gap.wSm,
+                  Icon(
+                    LucideIcons.chevronRight,
+                    color: scheme.mutedForeground,
+                    size: IconSize.row,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _fallbackLogo() =>
+      Image.asset('assets/cklogo.png', fit: BoxFit.contain);
 }

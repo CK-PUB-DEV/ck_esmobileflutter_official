@@ -1,3 +1,4 @@
+import 'package:pushtrial/api/api_version.dart';
 import 'package:flutter/material.dart';
 import '../screens/billing_information.dart';
 import '../screens/billing_information_v2.dart';
@@ -207,7 +208,7 @@ class ActionButtonsState extends State<ActionButtons> {
   Future<void> getUser() async {
     SharedPreferences preferences = await SharedPreferences.getInstance();
     final json = preferences.getString('studid');
-    final version = preferences.getString('schoolVersion') ?? 'v1';
+    final version = await ApiVersion.billingVersion();
 
     setState(() {
       schoolVersion = version;

@@ -8,6 +8,8 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <!-- <uses-permission android:name="android.permission.RECEIVE_SMS" />
@@ -20,6 +22,8 @@
         android:name="${applicationName}"
         android:icon="@drawable/essentiel"
         android:largeHeap="true"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:vmSafeMode="true">
         
         <!-- Declare support for 16 KB page sizes -->
@@ -49,6 +53,24 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- "Real-time tap alerts" (Profile): checks the school's server for new student taps and
+             announcements every 30 seconds while the app is closed. -->
+        <service
+            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
+            android:foregroundServiceType="specialUse"
+            android:exported="false">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Notifies parents within seconds when their child taps in or out of school, and of new school announcements, without a push service." />
+        </service>
+        <meta-data
+            android:name="com.ckessentiel.pushtrial.SCHOOL_ALERTS_ICON"
+            android:resource="@drawable/app_icon" />
+        <!-- Firebase push is off (AppConfig.firebasePush): don't let Firebase create a push token by
+             itself at startup. A build that turns it on still gets one when it asks for it. -->
+        <meta-data
+            android:name="firebase_messaging_auto_init_enabled"
+            android:value="false" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

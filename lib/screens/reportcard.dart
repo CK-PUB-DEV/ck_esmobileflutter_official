@@ -1,17 +1,17 @@
 import 'dart:convert';
-import 'package:dropdown_button2/dropdown_button2.dart';
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pushtrial/api/api.dart';
 import 'package:pushtrial/models/grades.dart';
-import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:pushtrial/models/school_info.dart';
 import 'package:pushtrial/models/year_sem.dart';
-import 'package:contained_tab_bar_view/contained_tab_bar_view.dart';
 import 'package:pushtrial/models/attendance.dart';
 import 'package:pushtrial/models/observedvalues.dart';
 import 'package:pushtrial/models/enrolled_stud.dart';
+import 'package:pushtrial/services/grading_setup.dart';
+import 'package:pushtrial/widgets/ui/ui.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 
 class ReportCardScreen extends StatefulWidget {
   const ReportCardScreen({super.key});
@@ -21,10 +21,14 @@ class ReportCardScreen extends StatefulWidget {
 }
 
 class _ReportCardScreenState extends State<ReportCardScreen> {
-  final ScrollController _verticalScrollController = ScrollController();
-  final ScrollController _horizontalScrollController = ScrollController();
 
-  Color mainClr = Colors.white;
+  // Slow responses can finish after the screen was closed; skip the update then.
+  @override
+  void setState(VoidCallback fn) {
+    if (mounted) super.setState(fn);
+  }
+  /// Selected tab for K-12 and senior high: 'grades', 'attendance' or 'values'.
+  String _tab = 'grades';
 
   var id = '0';
   var studid = '0';
@@ -121,9 +125,16 @@ class _ReportCardScreenState extends State<ReportCardScreen> {
     }
   }
 
+  /// How this school grades the selected level (terms or quarters); quarters until the server says.
+  GradingSetup _grading = GradingSetup.quarters;
+
   getGrades(int index) async {
     Iterable gdList = [];
     Iterable gdFinal = [];
+
+    if (gradelevel > 0 && gradelevel < 17) {
+      _grading = await GradingSetup.load(syid, gradelevel) ?? GradingSetup.quarters;
+    }
 
     await CallApi()
         .getStudGrade(id, gradelevel, syid, sectionid, strand, index)
@@ -366,1613 +377,604 @@ class _ReportCardScreenState extends State<ReportCardScreen> {
     });
   }
 
-  @override
-  void dispose() {
-    _verticalScrollController.dispose();
-    _horizontalScrollController.dispose();
-    super.dispose();
+  bool get _isCollege => gradelevel >= 17;
+  bool get _isShs => gradelevel == 14 || gradelevel == 15;
+  bool get _isDcc =>
+      schoolInfo.isNotEmpty &&
+      schoolInfo[0].abbreviation == 'DCC' &&
+      gradelevel >= 17;
+
+  String get _levelLabel => _isCollege ? 'College' : (_isShs ? 'SHS' : 'K-12');
+
+  EnrolledStud _emptyEnrollment() => EnrolledStud(
+    id: 0,
+    studid: 0,
+    syid: 0,
+    semid: 0,
+    dateenrolled: '',
+    levelid: 0,
+    sectionid: 0,
+    strandid: 0,
+    studstatus: 0,
+    levelname: '',
+    strandname: '',
+    description: '',
+    courseDesc: '',
+    semester: '',
+    sectionname: '',
+    sydesc: '',
+  );
+
+  void _onYearChanged(String value) {
+    setState(() {
+      selectedYear = value;
+      syid = int.parse(selectedYear);
+
+      final selectedEnrollment = enrolledstud.firstWhere(
+        (enrollment) => enrollment.syid == syid,
+        orElse: () {
+          ShadToaster.of(context).show(
+            const ShadToast(description: Text('No grades for this school year')),
+          );
+          return _emptyEnrollment();
+        },
+      );
+
+      gradelevel = selectedEnrollment.levelid;
+      sectionid = selectedEnrollment.sectionid;
+    });
+    if (selectedYear.isNotEmpty && selectedSem.isNotEmpty) {
+      getGrades(int.parse(semid.toString()));
+    }
+  }
+
+  void _onSemChanged(String value) {
+    _resetGradeData();
+    setState(() {
+      selectedSem = value;
+      semid = int.parse(value);
+    });
+    updateSelectedEnrollment(syid, semid);
+  }
+
+  void _onTabChanged(String value) {
+    setState(() => _tab = value);
+    if (value == 'attendance') getStudentAttendance();
+    if (value == 'values') getObservedValues();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: Text(
-          'REPORT CARD-${gradelevel >= 17 ? 'COLLEGE' : (gradelevel == 14 || gradelevel == 15) ? 'SHS' : 'K-12'}',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: schoolColor,
-          ),
-        ),
-        centerTitle: true,
-      ),
-      body: loading
-          ? const Center(
-              child: CircularProgressIndicator(semanticsLabel: 'Loading...'),
-            )
-          : Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    spacing: 2.0,
-                    children: [
-                      Flexible(
-                        child: DropdownButtonFormField2<String>(
-                          hint: Text(
-                            enrolledstud[0].sydesc,
-                            style: const TextStyle(fontSize: 10),
-                          ),
-                          items: schoolYear
-                              .map(
-                                (option) => DropdownMenuItem(
-                                  child: Text(
-                                    option.sydesc,
-                                    style: const TextStyle(fontSize: 10),
-                                  ),
-                                  value: option.id.toString(),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (value) {
-                            setState(() {
-                              selectedYear = value!;
-                              syid = int.parse(selectedYear);
-
-                              EnrolledStud? selectedEnrollment = enrolledstud
-                                  .firstWhere(
-                                    (enrollment) => enrollment.syid == syid,
-                                    orElse: () {
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        SnackBar(
-                                          content: const Text(
-                                            "No Schedule for this School Year",
-                                          ),
-                                          backgroundColor: schoolColor,
-                                        ),
-                                      );
-
-                                      return EnrolledStud(
-                                        id: 0,
-                                        studid: 0,
-                                        syid: 0,
-                                        semid: 0,
-                                        dateenrolled: '',
-                                        levelid: 0,
-                                        sectionid: 0,
-                                        strandid: 0,
-                                        studstatus: 0,
-                                        levelname: '',
-                                        strandname: '',
-                                        description: '',
-                                        courseDesc: '',
-                                        semester: '',
-                                        sectionname: '',
-                                        sydesc: '',
-                                      );
-                                    },
-                                  );
-
-                              if (selectedEnrollment != null) {
-                                gradelevel = selectedEnrollment.levelid;
-                                sectionid = selectedEnrollment.sectionid;
-                              } else {
-                                gradelevel = 0;
-                                sectionid = 0;
-                              }
-
-                              if (selectedYear.isNotEmpty &&
-                                  selectedSem.isNotEmpty) {
-                                getGrades(int.parse(semid.toString()));
-                              }
-                            });
-                          },
-                          decoration: const InputDecoration(
-                            labelText: 'School Year',
-                            labelStyle: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                      ),
-                      // const SizedBox(width: 10.0),
-                      if (gradelevel >= 14 && gradelevel != 16) ...[
-                        Flexible(
-                          child: DropdownButtonFormField2<String>(
-                            hint: Text(
-                              enrolledstud[0].semester,
-                              style: const TextStyle(fontSize: 10),
-                            ),
-                            items: schoolSem
-                                .map(
-                                  (option) => DropdownMenuItem(
-                                    child: Text(
-                                      option.semester,
-                                      style: const TextStyle(fontSize: 10),
-                                    ),
-                                    value: option.id.toString(),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: (value) {
-                              if (value != null) {
-                                _resetGradeData();
-                                setState(() {
-                                  selectedSem = value;
-                                  semid = int.parse(value);
-                                });
-                                updateSelectedEnrollment(syid, semid);
-                              }
-                            },
-                            decoration: const InputDecoration(
-                              labelText: 'Semester',
-                              labelStyle: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                              ),
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  Expanded(
-                    child: concatenatedArray.isEmpty
-                        ? Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              Image.asset('assets/search1.png'),
-                              const SizedBox(height: 10.0),
-                              Text(
-                                "No available grades for the selected year and semester",
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.bold,
-                                  color: schoolColor,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
-                          )
-                        : (gradelevel >= 17
-                              ? ListView(
-                                  children: [
-                                    ...concatenatedArray.map(
-                                      (grade) => Container(
-                                        margin: const EdgeInsets.only(
-                                          bottom: 16.0,
-                                        ),
-                                        decoration: const BoxDecoration(),
-                                        child: ClipRRect(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              if (gradelevel >= 17)
-                                                Container(
-                                                  color: schoolColor,
-                                                  padding: const EdgeInsets.all(
-                                                    8.0,
-                                                  ),
-                                                  child: Row(
-                                                    children: [
-                                                      Expanded(
-                                                        child: SingleChildScrollView(
-                                                          scrollDirection:
-                                                              Axis.horizontal,
-                                                          child: Padding(
-                                                            padding:
-                                                                const EdgeInsets.all(
-                                                                  2.0,
-                                                                ),
-                                                            child: Text.rich(
-                                                              TextSpan(
-                                                                children: [
-                                                                  TextSpan(
-                                                                    text:
-                                                                        '${grade.subjcode}: ',
-                                                                    style: const TextStyle(
-                                                                      color: Colors
-                                                                          .white,
-                                                                      fontSize:
-                                                                          13,
-                                                                      fontFamily:
-                                                                          'Poppins',
-                                                                      fontWeight:
-                                                                          FontWeight
-                                                                              .bold,
-                                                                    ),
-                                                                  ),
-                                                                  TextSpan(
-                                                                    text: grade
-                                                                        .subjdesc,
-                                                                    style: const TextStyle(
-                                                                      color: Colors
-                                                                          .white,
-                                                                      fontSize:
-                                                                          13,
-                                                                      fontFamily:
-                                                                          'Poppins',
-                                                                      fontWeight:
-                                                                          FontWeight
-                                                                              .normal,
-                                                                    ),
-                                                                  ),
-                                                                ],
-                                                              ),
-                                                              overflow:
-                                                                  TextOverflow
-                                                                      .ellipsis,
-                                                              maxLines: 3,
-                                                            ),
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
-                                              Container(
-                                                color: Colors.white,
-                                                child: Center(
-                                                  child: Column(
-                                                    crossAxisAlignment:
-                                                        CrossAxisAlignment
-                                                            .start,
-                                                    children: [
-                                                      if (gradelevel >= 17)
-                                                        Table(
-                                                          columnWidths:
-                                                              (schoolInfo
-                                                                      .isNotEmpty &&
-                                                                  schoolInfo[0]
-                                                                          .abbreviation ==
-                                                                      'DCC' &&
-                                                                  gradelevel >=
-                                                                      17)
-                                                              ? const {
-                                                                  0: FlexColumnWidth(
-                                                                    2,
-                                                                  ),
-                                                                  1: FlexColumnWidth(
-                                                                    2,
-                                                                  ),
-                                                                }
-                                                              : const {
-                                                                  0: FlexColumnWidth(
-                                                                    1,
-                                                                  ),
-                                                                  1: FlexColumnWidth(
-                                                                    1.5,
-                                                                  ),
-                                                                  2: FlexColumnWidth(
-                                                                    1,
-                                                                  ),
-                                                                  3: FlexColumnWidth(
-                                                                    1,
-                                                                  ),
-                                                                  4: FlexColumnWidth(
-                                                                    1,
-                                                                  ),
-                                                                  5: FlexColumnWidth(
-                                                                    1.5,
-                                                                  ),
-                                                                },
-                                                          border:
-                                                              TableBorder.all(
-                                                                color: Colors
-                                                                    .black12,
-                                                              ),
-                                                          children: [
-                                                            TableRow(
-                                                              decoration: BoxDecoration(
-                                                                color: schoolColor
-                                                                    .withOpacity(
-                                                                      .2,
-                                                                    ),
-                                                              ),
-                                                              children:
-                                                                  (schoolInfo
-                                                                          .isNotEmpty &&
-                                                                      schoolInfo[0]
-                                                                              .abbreviation ==
-                                                                          'DCC' &&
-                                                                      gradelevel >=
-                                                                          17)
-                                                                  ? const [
-                                                                      Padding(
-                                                                        padding: EdgeInsets.symmetric(
-                                                                          vertical:
-                                                                              8.0,
-                                                                        ),
-                                                                        child: Text(
-                                                                          'Final\nGrade',
-                                                                          textAlign:
-                                                                              TextAlign.center,
-                                                                          style: TextStyle(
-                                                                            fontFamily:
-                                                                                'Poppins',
-                                                                            fontSize:
-                                                                                12,
-                                                                            fontWeight:
-                                                                                FontWeight.bold,
-                                                                          ),
-                                                                        ),
-                                                                      ),
-                                                                      Padding(
-                                                                        padding: EdgeInsets.symmetric(
-                                                                          vertical:
-                                                                              8.0,
-                                                                        ),
-                                                                        child: Text(
-                                                                          'Remarks',
-                                                                          textAlign:
-                                                                              TextAlign.center,
-                                                                          style: TextStyle(
-                                                                            fontFamily:
-                                                                                'Poppins',
-                                                                            fontSize:
-                                                                                12,
-                                                                            fontWeight:
-                                                                                FontWeight.bold,
-                                                                          ),
-                                                                        ),
-                                                                      ),
-                                                                    ]
-                                                                  : const [
-                                                                      Padding(
-                                                                        padding: EdgeInsets.symmetric(
-                                                                          vertical:
-                                                                              8.0,
-                                                                        ),
-                                                                        child: Text(
-                                                                          'Prelim',
-                                                                          textAlign:
-                                                                              TextAlign.center,
-                                                                          style: TextStyle(
-                                                                            fontFamily:
-                                                                                'Poppins',
-                                                                            fontSize:
-                                                                                12,
-                                                                            fontWeight:
-                                                                                FontWeight.bold,
-                                                                          ),
-                                                                        ),
-                                                                      ),
-                                                                      Padding(
-                                                                        padding: EdgeInsets.symmetric(
-                                                                          vertical:
-                                                                              8.0,
-                                                                        ),
-                                                                        child: Text(
-                                                                          'Midterm',
-                                                                          textAlign:
-                                                                              TextAlign.center,
-                                                                          style: TextStyle(
-                                                                            fontFamily:
-                                                                                'Poppins',
-                                                                            fontSize:
-                                                                                12,
-                                                                            fontWeight:
-                                                                                FontWeight.bold,
-                                                                          ),
-                                                                        ),
-                                                                      ),
-                                                                      Padding(
-                                                                        padding: EdgeInsets.symmetric(
-                                                                          vertical:
-                                                                              8.0,
-                                                                        ),
-                                                                        child: Text(
-                                                                          'Pre\nFinal',
-                                                                          textAlign:
-                                                                              TextAlign.center,
-                                                                          style: TextStyle(
-                                                                            fontFamily:
-                                                                                'Poppins',
-                                                                            fontSize:
-                                                                                12,
-                                                                            fontWeight:
-                                                                                FontWeight.bold,
-                                                                          ),
-                                                                        ),
-                                                                      ),
-                                                                      Padding(
-                                                                        padding: EdgeInsets.symmetric(
-                                                                          vertical:
-                                                                              8.0,
-                                                                        ),
-                                                                        child: Text(
-                                                                          'Final',
-                                                                          textAlign:
-                                                                              TextAlign.center,
-                                                                          style: TextStyle(
-                                                                            fontFamily:
-                                                                                'Poppins',
-                                                                            fontSize:
-                                                                                12,
-                                                                            fontWeight:
-                                                                                FontWeight.bold,
-                                                                          ),
-                                                                        ),
-                                                                      ),
-                                                                      Padding(
-                                                                        padding: EdgeInsets.symmetric(
-                                                                          vertical:
-                                                                              8.0,
-                                                                        ),
-                                                                        child: Text(
-                                                                          'Final\nGrade',
-                                                                          textAlign:
-                                                                              TextAlign.center,
-                                                                          style: TextStyle(
-                                                                            fontFamily:
-                                                                                'Poppins',
-                                                                            fontSize:
-                                                                                12,
-                                                                            fontWeight:
-                                                                                FontWeight.bold,
-                                                                          ),
-                                                                        ),
-                                                                      ),
-                                                                      Padding(
-                                                                        padding: EdgeInsets.symmetric(
-                                                                          vertical:
-                                                                              8.0,
-                                                                        ),
-                                                                        child: Text(
-                                                                          'Remarks',
-                                                                          textAlign:
-                                                                              TextAlign.center,
-                                                                          style: TextStyle(
-                                                                            fontFamily:
-                                                                                'Poppins',
-                                                                            fontSize:
-                                                                                12,
-                                                                            fontWeight:
-                                                                                FontWeight.bold,
-                                                                          ),
-                                                                        ),
-                                                                      ),
-                                                                    ],
-                                                            ),
-                                                            // Data row
-                                                            TableRow(
-                                                              children:
-                                                                  (schoolInfo
-                                                                          .isNotEmpty &&
-                                                                      schoolInfo[0]
-                                                                              .abbreviation ==
-                                                                          'DCC' &&
-                                                                      gradelevel >=
-                                                                          17)
-                                                                  ? [
-                                                                      Padding(
-                                                                        padding: const EdgeInsets.symmetric(
-                                                                          vertical:
-                                                                              8.0,
-                                                                        ),
-                                                                        child: Text(
-                                                                          grade.finalstatus ==
-                                                                                  '4'
-                                                                              ? grade.finalgrade
-                                                                              : ' ',
-                                                                          textAlign:
-                                                                              TextAlign.center,
-                                                                          style: const TextStyle(
-                                                                            fontFamily:
-                                                                                'Poppins',
-                                                                            fontSize:
-                                                                                12,
-                                                                          ),
-                                                                        ),
-                                                                      ),
-                                                                      Padding(
-                                                                        padding: const EdgeInsets.symmetric(
-                                                                          vertical:
-                                                                              8.0,
-                                                                        ),
-                                                                        child: Text(
-                                                                          grade.finalstatus ==
-                                                                                  '4'
-                                                                              ? grade.fgremarks
-                                                                              : ' ',
-                                                                          textAlign:
-                                                                              TextAlign.center,
-                                                                          style: TextStyle(
-                                                                            fontFamily:
-                                                                                'Poppins',
-                                                                            fontSize:
-                                                                                12,
-                                                                            color:
-                                                                                grade.fgremarks ==
-                                                                                    'PASSED'
-                                                                                ? Colors.green
-                                                                                : Colors.red,
-                                                                          ),
-                                                                        ),
-                                                                      ),
-                                                                    ]
-                                                                  : [
-                                                                      Padding(
-                                                                        padding: const EdgeInsets.symmetric(
-                                                                          vertical:
-                                                                              8.0,
-                                                                        ),
-                                                                        child: Text(
-                                                                          grade.prelemstatus ==
-                                                                                  '4'
-                                                                              ? grade.prelemgrade
-                                                                              : ' ',
-                                                                          textAlign:
-                                                                              TextAlign.center,
-                                                                          style: const TextStyle(
-                                                                            fontFamily:
-                                                                                'Poppins',
-                                                                            fontSize:
-                                                                                12,
-                                                                          ),
-                                                                        ),
-                                                                      ),
-                                                                      Padding(
-                                                                        padding: const EdgeInsets.symmetric(
-                                                                          vertical:
-                                                                              8.0,
-                                                                        ),
-                                                                        child: Text(
-                                                                          grade.midtermstatus ==
-                                                                                  '4'
-                                                                              ? grade.midtermgrade
-                                                                              : ' ',
-                                                                          textAlign:
-                                                                              TextAlign.center,
-                                                                          style: const TextStyle(
-                                                                            fontFamily:
-                                                                                'Poppins',
-                                                                            fontSize:
-                                                                                12,
-                                                                          ),
-                                                                        ),
-                                                                      ),
-                                                                      Padding(
-                                                                        padding: const EdgeInsets.symmetric(
-                                                                          vertical:
-                                                                              8.0,
-                                                                        ),
-                                                                        child: Text(
-                                                                          grade.prefistatus ==
-                                                                                  '4'
-                                                                              ? grade.prefigrade
-                                                                              : ' ',
-                                                                          textAlign:
-                                                                              TextAlign.center,
-                                                                          style: const TextStyle(
-                                                                            fontFamily:
-                                                                                'Poppins',
-                                                                            fontSize:
-                                                                                12,
-                                                                          ),
-                                                                        ),
-                                                                      ),
-                                                                      Padding(
-                                                                        padding: const EdgeInsets.symmetric(
-                                                                          vertical:
-                                                                              8.0,
-                                                                        ),
-                                                                        child: Text(
-                                                                          grade.finalstatus ==
-                                                                                  '4'
-                                                                              ? grade.finalgrade
-                                                                              : ' ',
-                                                                          textAlign:
-                                                                              TextAlign.center,
-                                                                          style: const TextStyle(
-                                                                            fontFamily:
-                                                                                'Poppins',
-                                                                            fontSize:
-                                                                                12,
-                                                                          ),
-                                                                        ),
-                                                                      ),
-                                                                      Padding(
-                                                                        padding: const EdgeInsets.symmetric(
-                                                                          vertical:
-                                                                              8.0,
-                                                                        ),
-                                                                        child: Text(
-                                                                          grade.prelemstatus ==
-                                                                                      '4' &&
-                                                                                  grade.midtermstatus ==
-                                                                                      '4' &&
-                                                                                  grade.prefistatus ==
-                                                                                      '4' &&
-                                                                                  grade.finalstatus ==
-                                                                                      '4'
-                                                                              ? grade.fg
-                                                                              : ' ',
-                                                                          textAlign:
-                                                                              TextAlign.center,
-                                                                          style: const TextStyle(
-                                                                            fontFamily:
-                                                                                'Poppins',
-                                                                            fontSize:
-                                                                                12,
-                                                                          ),
-                                                                        ),
-                                                                      ),
-                                                                      Padding(
-                                                                        padding: const EdgeInsets.symmetric(
-                                                                          vertical:
-                                                                              8.0,
-                                                                        ),
-                                                                        child: Text(
-                                                                          grade.prelemstatus ==
-                                                                                      '4' &&
-                                                                                  grade.midtermstatus ==
-                                                                                      '4' &&
-                                                                                  grade.prefistatus ==
-                                                                                      '4' &&
-                                                                                  grade.finalstatus ==
-                                                                                      '4'
-                                                                              ? grade.fgremarks
-                                                                              : ' ',
-                                                                          textAlign:
-                                                                              TextAlign.center,
-                                                                          style: TextStyle(
-                                                                            fontFamily:
-                                                                                'Poppins',
-                                                                            fontSize:
-                                                                                12,
-                                                                            color:
-                                                                                grade.fgremarks ==
-                                                                                    'PASSED'
-                                                                                ? Colors.green
-                                                                                : Colors.red,
-                                                                          ),
-                                                                        ),
-                                                                      ),
-                                                                    ],
-                                                            ),
-                                                          ],
-                                                        ),
-                                                    ],
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                )
-                              : Container(
-                                  child: ContainedTabBarView(
-                                    tabs: [
-                                      const Center(
-                                        child: Text(
-                                          'Grades',
-                                          style: TextStyle(fontSize: 12),
-                                        ),
-                                      ),
-                                      const Center(
-                                        child: Text(
-                                          'Attendance',
-                                          style: TextStyle(fontSize: 12),
-                                        ),
-                                      ),
-                                      const Center(
-                                        child: Text(
-                                          'Core Values',
-                                          style: TextStyle(fontSize: 12),
-                                        ),
-                                      ),
-                                    ],
-                                    views: [
-                                      _buildTabContentGrades(),
-                                      _buildTabContentAttendance(),
-                                      _buildTabContentCoreValues(),
-                                    ],
-                                    onChange: (index) {
-                                      if (index == 1) {
-                                        getStudentAttendance();
-                                      }
-                                      if (index == 2) {
-                                        getObservedValues();
-                                      }
-                                    },
-                                  ),
-                                )),
-                  ),
-                ],
+    return AppPage(
+      title: 'Report card',
+      actions: loading
+          ? null
+          : [
+              Padding(
+                padding: const EdgeInsets.only(right: Gap.lg),
+                child: Center(child: ShadBadge.secondary(child: Text(_levelLabel))),
               ),
-            ),
-    );
-  }
-
-  Widget _buildTabContentGrades() {
-    return Padding(
-      padding: const EdgeInsets.only(top: 20.0),
-      child: concatenatedArray.isEmpty
-          ? Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Image.asset('assets/search1.png'),
-                const SizedBox(height: 10.0),
-                Text(
-                  "No available grades for the selected year and semester",
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    color: schoolColor,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            )
+            ],
+      body: loading
+          ? const LoadingSkeleton()
           : ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(Gap.lg, Gap.sm, Gap.lg, Gap.xl),
               children: [
-                ...concatenatedArray.map(
-                  (grade) => Container(
-                    margin: const EdgeInsets.only(bottom: 16.0),
-                    decoration: const BoxDecoration(),
-                    child: ClipRRect(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            color: schoolColor,
-                            padding: const EdgeInsets.all(8.0),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: SingleChildScrollView(
-                                    scrollDirection: Axis.horizontal,
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(2.0),
-                                      child: Text.rich(
-                                        TextSpan(
-                                          children: [
-                                            TextSpan(
-                                              text: '${grade.subjcode}: ',
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 13,
-
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                            TextSpan(
-                                              text: grade.subjdesc,
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 13,
-
-                                                fontWeight: FontWeight.normal,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                        maxLines: 3,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Container(
-                            color: Colors.white,
-                            child: Center(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  if (gradelevel == 14 || gradelevel == 15)
-                                    Table(
-                                      columnWidths: const {
-                                        0: FlexColumnWidth(1),
-                                        1: FlexColumnWidth(1),
-                                        2: FlexColumnWidth(1),
-                                        3: FlexColumnWidth(1),
-                                        4: FlexColumnWidth(1),
-                                        5: FlexColumnWidth(1.5),
-                                      },
-                                      border: TableBorder.all(
-                                        color: Colors.black12,
-                                      ),
-                                      children: [
-                                        // Header row
-                                        TableRow(
-                                          decoration: BoxDecoration(
-                                            color: schoolColor.withOpacity(.2),
-                                          ),
-                                          children: [
-                                            if (semid == 1 || semid == 0) ...[
-                                              const Padding(
-                                                padding: EdgeInsets.symmetric(
-                                                  vertical: 8.0,
-                                                ),
-                                                child: Text(
-                                                  'Q1',
-                                                  textAlign: TextAlign.center,
-                                                  style: TextStyle(
-                                                    fontSize: 12,
-                                                    fontWeight: FontWeight.bold,
-                                                  ),
-                                                ),
-                                              ),
-                                              const Padding(
-                                                padding: EdgeInsets.symmetric(
-                                                  vertical: 8.0,
-                                                ),
-                                                child: Text(
-                                                  'Q2',
-                                                  textAlign: TextAlign.center,
-                                                  style: TextStyle(
-                                                    fontSize: 12,
-                                                    fontWeight: FontWeight.bold,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                            if (semid == 2 || semid == 0) ...[
-                                              const Padding(
-                                                padding: EdgeInsets.symmetric(
-                                                  vertical: 8.0,
-                                                ),
-                                                child: Text(
-                                                  'Q3',
-                                                  textAlign: TextAlign.center,
-                                                  style: TextStyle(
-                                                    fontSize: 12,
-                                                    fontWeight: FontWeight.bold,
-                                                  ),
-                                                ),
-                                              ),
-                                              const Padding(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      vertical: 8.0,
-                                                    ),
-                                                child: Text(
-                                                  'Q4',
-                                                  textAlign: TextAlign.center,
-                                                  style: TextStyle(
-                                                    fontSize: 12,
-                                                    fontWeight: FontWeight.bold,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                            const Padding(
-                                              padding: EdgeInsets.symmetric(
-                                                vertical: 8.0,
-                                              ),
-                                              child: Text(
-                                                'Final\nRating',
-                                                textAlign: TextAlign.center,
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                            ),
-                                            const Padding(
-                                              padding: EdgeInsets.symmetric(
-                                                vertical: 8.0,
-                                              ),
-                                              child: Text(
-                                                'Action\nTaken',
-                                                textAlign: TextAlign.center,
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        // Data row
-                                        TableRow(
-                                          children: [
-                                            if (semid == 1 || semid == 0) ...[
-                                              Padding(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      vertical: 8.0,
-                                                    ),
-                                                child: Text(
-                                                  grade.q1 != "null" &&
-                                                          grade.q1status == '4'
-                                                      ? grade.q1
-                                                      : '  ',
-                                                  textAlign: TextAlign.center,
-                                                  style: const TextStyle(
-                                                    fontSize: 12,
-                                                  ),
-                                                ),
-                                              ),
-                                              Padding(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      vertical: 8.0,
-                                                    ),
-                                                child: Text(
-                                                  grade.q2 != "null" &&
-                                                          grade.q2status == '4'
-                                                      ? grade.q2
-                                                      : '  ',
-                                                  textAlign: TextAlign.center,
-                                                  style: const TextStyle(
-                                                    fontSize: 12,
-                                                  ),
-                                                ),
-                                              ),
-                                              Padding(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      vertical: 8.0,
-                                                    ),
-                                                child: Text(
-                                                  grade.finalrating != "null" &&
-                                                          grade.q1status ==
-                                                              '4' &&
-                                                          grade.q2status == '4'
-                                                      ? grade.finalrating
-                                                      : '  ',
-                                                  textAlign: TextAlign.center,
-                                                  style: const TextStyle(
-                                                    fontSize: 12,
-                                                  ),
-                                                ),
-                                              ),
-                                              Padding(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      vertical: 8.0,
-                                                    ),
-                                                child:
-                                                    grade.q1status == '4' &&
-                                                        grade.q2status == '4'
-                                                    ? Text(
-                                                        grade.actiontaken,
-                                                        textAlign:
-                                                            TextAlign.center,
-                                                        style: TextStyle(
-                                                          fontSize: 12,
-                                                          color:
-                                                              grade.actiontaken ==
-                                                                  'PASSED'
-                                                              ? Colors.green
-                                                              : Colors.red,
-                                                        ),
-                                                      )
-                                                    : SizedBox.shrink(),
-                                              ),
-                                            ],
-                                            if (semid == 2 || semid == 0) ...[
-                                              Padding(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      vertical: 8.0,
-                                                    ),
-                                                child: Text(
-                                                  grade.q3 != "null" &&
-                                                          grade.q3status == '4'
-                                                      ? grade.q3
-                                                      : '  ',
-                                                  textAlign: TextAlign.center,
-                                                  style: const TextStyle(
-                                                    fontSize: 12,
-                                                  ),
-                                                ),
-                                              ),
-                                              Padding(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      vertical: 8.0,
-                                                    ),
-                                                child: Text(
-                                                  grade.q4 != "null" &&
-                                                          grade.q4status == '4'
-                                                      ? grade.q4
-                                                      : '  ',
-                                                  textAlign: TextAlign.center,
-                                                  style: const TextStyle(
-                                                    fontSize: 12,
-                                                  ),
-                                                ),
-                                              ),
-                                              Padding(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      vertical: 8.0,
-                                                    ),
-                                                child: Text(
-                                                  grade.finalrating != "null" &&
-                                                          grade.q3status ==
-                                                              '4' &&
-                                                          grade.q4status == '4'
-                                                      ? grade.finalrating
-                                                      : '  ',
-                                                  textAlign: TextAlign.center,
-                                                  style: const TextStyle(
-                                                    fontSize: 12,
-                                                  ),
-                                                ),
-                                              ),
-                                              Padding(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      vertical: 8.0,
-                                                    ),
-                                                child:
-                                                    grade.q3status == '4' &&
-                                                        grade.q4status == '4'
-                                                    ? Text(
-                                                        grade.actiontaken,
-                                                        textAlign:
-                                                            TextAlign.center,
-                                                        style: TextStyle(
-                                                          fontSize: 12,
-                                                          color:
-                                                              grade.actiontaken ==
-                                                                  'PASSED'
-                                                              ? Colors.green
-                                                              : Colors.red,
-                                                        ),
-                                                      )
-                                                    : SizedBox.shrink(),
-                                              ),
-                                            ],
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                  if (gradelevel <= 13 || gradelevel == 16)
-                                    Table(
-                                      columnWidths: const {
-                                        0: FlexColumnWidth(1),
-                                        1: FlexColumnWidth(1),
-                                        2: FlexColumnWidth(1),
-                                        3: FlexColumnWidth(1),
-                                        4: FlexColumnWidth(1),
-                                        5: FlexColumnWidth(1.5),
-                                      },
-                                      border: TableBorder.all(
-                                        color: Colors.black12,
-                                      ),
-                                      children: [
-                                        TableRow(
-                                          decoration: BoxDecoration(
-                                            color: schoolColor.withOpacity(.2),
-                                          ),
-                                          children: const [
-                                            Padding(
-                                              padding: EdgeInsets.symmetric(
-                                                vertical: 8.0,
-                                              ),
-                                              child: Text(
-                                                'Q1',
-                                                textAlign: TextAlign.center,
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                            ),
-                                            Padding(
-                                              padding: EdgeInsets.symmetric(
-                                                vertical: 8.0,
-                                              ),
-                                              child: Text(
-                                                'Q2',
-                                                textAlign: TextAlign.center,
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                            ),
-                                            Padding(
-                                              padding: EdgeInsets.symmetric(
-                                                vertical: 8.0,
-                                              ),
-                                              child: Text(
-                                                'Q3',
-                                                textAlign: TextAlign.center,
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                            ),
-                                            Padding(
-                                              padding: EdgeInsets.symmetric(
-                                                vertical: 8.0,
-                                              ),
-                                              child: Text(
-                                                'Q4',
-                                                textAlign: TextAlign.center,
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                            ),
-                                            Padding(
-                                              padding: EdgeInsets.symmetric(
-                                                vertical: 8.0,
-                                              ),
-                                              child: Text(
-                                                'Final\nRating',
-                                                textAlign: TextAlign.center,
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                            ),
-                                            Padding(
-                                              padding: EdgeInsets.symmetric(
-                                                vertical: 8.0,
-                                              ),
-                                              child: Text(
-                                                'Action\nTaken',
-                                                textAlign: TextAlign.center,
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        TableRow(
-                                          children: [
-                                            Padding(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    vertical: 8.0,
-                                                  ),
-                                              child: Text(
-                                                grade.q1 != "null" &&
-                                                        grade.q1status == '4'
-                                                    ? grade.q1
-                                                    : '  ',
-                                                textAlign: TextAlign.center,
-                                                style: const TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ),
-                                            Padding(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    vertical: 8.0,
-                                                  ),
-                                              child: Text(
-                                                grade.q2 != "null" &&
-                                                        grade.q2status == '4'
-                                                    ? grade.q2
-                                                    : '  ',
-                                                textAlign: TextAlign.center,
-                                                style: const TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ),
-                                            Padding(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    vertical: 8.0,
-                                                  ),
-                                              child: Text(
-                                                grade.q3 != "null" &&
-                                                        grade.q3status == '4'
-                                                    ? grade.q3
-                                                    : '  ',
-                                                textAlign: TextAlign.center,
-                                                style: const TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ),
-                                            Padding(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    vertical: 8.0,
-                                                  ),
-                                              child: Text(
-                                                grade.q4 != "null" &&
-                                                        grade.q4status == '4'
-                                                    ? grade.q4
-                                                    : '  ',
-                                                textAlign: TextAlign.center,
-                                                style: const TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ),
-                                            Padding(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    vertical: 8.0,
-                                                  ),
-                                              child: Text(
-                                                grade.finalrating != "null" &&
-                                                        grade.q1status == '4' &&
-                                                        grade.q2status == '4' &&
-                                                        grade.q3status == '4' &&
-                                                        grade.q4status == '4'
-                                                    ? grade.finalrating
-                                                    : '  ',
-                                                textAlign: TextAlign.center,
-                                                style: const TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ),
-                                            Padding(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    vertical: 8.0,
-                                                  ),
-                                              child:
-                                                  grade.q1status == '4' &&
-                                                      grade.q2status == '4' &&
-                                                      grade.q3status == '4' &&
-                                                      grade.q4status == '4'
-                                                  ? Text(
-                                                      grade.actiontaken,
-                                                      textAlign:
-                                                          TextAlign.center,
-                                                      style: TextStyle(
-                                                        fontSize: 12,
-                                                        color:
-                                                            grade.actiontaken ==
-                                                                'PASSED'
-                                                            ? Colors.green
-                                                            : Colors.red,
-                                                      ),
-                                                    )
-                                                  : SizedBox.shrink(),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: _FieldSelect(
+                        label: 'School year',
+                        value: selectedYear.isNotEmpty ? selectedYear : null,
+                        options: [for (final y in schoolYear) (y.id.toString(), y.sydesc)],
+                        onChanged: _onYearChanged,
                       ),
                     ),
-                  ),
+                    if (gradelevel >= 14 && gradelevel != 16) ...[
+                      Gap.wMd,
+                      Expanded(
+                        child: _FieldSelect(
+                          label: 'Semester',
+                          value: selectedSem.isNotEmpty ? selectedSem : null,
+                          options: [for (final s in schoolSem) (s.id.toString(), s.semester)],
+                          onChanged: _onSemChanged,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
+                Gap.hLg,
+                if (_isCollege)
+                  ..._gradesChildren()
+                else ...[
+                  ShadTabs<String>(
+                    value: _tab,
+                    onChanged: _onTabChanged,
+                    tabs: const [
+                      ShadTab(value: 'grades', child: Text('Grades')),
+                      ShadTab(value: 'attendance', child: Text('Attendance')),
+                      ShadTab(value: 'values', child: Text('Core values')),
+                    ],
+                  ),
+                  Gap.hLg,
+                  if (_tab == 'grades')
+                    ..._gradesChildren()
+                  else if (_tab == 'attendance')
+                    ..._attendanceChildren()
+                  else
+                    ..._coreValuesChildren(),
+                ],
               ],
             ),
     );
   }
 
-  Widget _buildTabContentAttendance() {
-    int totalDays = attendance.fold(0, (sum, record) => sum + record.days);
-    int totalPresent = attendance.fold(
-      0,
-      (sum, record) => sum + record.present,
-    );
-    int totalAbsent = attendance.fold(0, (sum, record) => sum + record.absent);
+  // ---------------------------------------------------------------------------
+  // Grades
+  // ---------------------------------------------------------------------------
 
-    return Padding(
-      padding: const EdgeInsets.only(top: 20.0),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          return Scrollbar(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.vertical,
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(minWidth: constraints.maxWidth),
-                  child: IntrinsicHeight(
-                    child: _isLoadingAttendance
-                        ? const Center(
-                            child: CircularProgressIndicator(
-                              semanticsLabel: 'Loading...',
-                            ),
-                          )
-                        : DataTable(
-                            columnSpacing: 20.0,
-                            columns: const [
-                              DataColumn(
-                                label: Text(
-                                  'Months',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.black,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ),
-                              DataColumn(
-                                label: Text(
-                                  'No. of\nSchool\nDays',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.black,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ),
-                              DataColumn(
-                                label: Text(
-                                  'No. of\nDays\nPresent',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.black,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ),
-                              DataColumn(
-                                label: Text(
-                                  'No. of\nDays\nAbsent',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.black,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ),
-                            ],
-                            rows: [
-                              ...attendance.map((Attendance record) {
-                                return DataRow(
-                                  cells: [
-                                    DataCell(
-                                      Text(
-                                        record.monthdesc,
-                                        style: const TextStyle(fontSize: 12),
-                                      ),
-                                    ),
-                                    DataCell(
-                                      Text(
-                                        record.days.toString(),
-                                        style: const TextStyle(fontSize: 12),
-                                      ),
-                                    ),
-                                    DataCell(
-                                      Text(
-                                        record.present.toString(),
-                                        style: const TextStyle(fontSize: 12),
-                                      ),
-                                    ),
-                                    DataCell(
-                                      Text(
-                                        record.absent.toString(),
-                                        style: const TextStyle(fontSize: 12),
-                                      ),
-                                    ),
-                                  ],
-                                );
-                              }).toList(),
-                              DataRow(
-                                cells: [
-                                  const DataCell(
-                                    Text(
-                                      'TOTAL',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                  DataCell(
-                                    Text(
-                                      totalDays.toString(),
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                  DataCell(
-                                    Text(
-                                      totalPresent.toString(),
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                  DataCell(
-                                    Text(
-                                      totalAbsent.toString(),
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                  ),
-                ),
-              ),
-            ),
-          );
-        },
-      ),
+  List<Widget> _gradesChildren() {
+    if (concatenatedArray.isEmpty) {
+      return const [
+        Padding(
+          padding: EdgeInsets.only(top: Gap.xxl),
+          child: EmptyState(
+            title: 'No grades available',
+            message: 'There are no grades for the selected school year and semester.',
+            icon: LucideIcons.graduationCap,
+          ),
+        ),
+      ];
+    }
+    return [for (final grade in concatenatedArray) _buildSubjectCard(grade)];
+  }
+
+  /// A period value is shown only once it has been released (status 4).
+  String _period(String value, String status) =>
+      value != 'null' && status == '4' ? value : '';
+
+  Widget _buildSubjectCard(Grades grade) {
+    final cells = <_Cell>[];
+    final summaries = <_Summary>[];
+
+    if (_isCollege) {
+      if (_isDcc) {
+        final released = grade.finalstatus == '4';
+        summaries.add(
+          _Summary(
+            'Final grade',
+            released ? grade.finalgrade : '',
+            released ? grade.fgremarks : '',
+          ),
+        );
+      } else {
+        cells.addAll([
+          _Cell('Prelim', grade.prelemstatus == '4' ? grade.prelemgrade : ''),
+          _Cell('Midterm', grade.midtermstatus == '4' ? grade.midtermgrade : ''),
+          _Cell('Pre-final', grade.prefistatus == '4' ? grade.prefigrade : ''),
+          _Cell('Final', grade.finalstatus == '4' ? grade.finalgrade : ''),
+        ]);
+        final all = grade.prelemstatus == '4' &&
+            grade.midtermstatus == '4' &&
+            grade.prefistatus == '4' &&
+            grade.finalstatus == '4';
+        summaries.add(
+          _Summary('Final grade', all ? grade.fg : '', all ? grade.fgremarks : ''),
+        );
+      }
+    } else if (_isShs && _grading.mode != 'term') {
+      final first = semid == 1 || semid == 0;
+      final second = semid == 2 || semid == 0;
+      if (first) {
+        cells.addAll([
+          _Cell('Q1', _period(grade.q1, grade.q1status)),
+          _Cell('Q2', _period(grade.q2, grade.q2status)),
+        ]);
+      }
+      if (second) {
+        cells.addAll([
+          _Cell('Q3', _period(grade.q3, grade.q3status)),
+          _Cell('Q4', _period(grade.q4, grade.q4status)),
+        ]);
+      }
+      final both = first && second;
+      if (first) {
+        final done = grade.q1status == '4' && grade.q2status == '4';
+        summaries.add(
+          _Summary(
+            both ? 'Final rating, 1st semester' : 'Final rating',
+            done && grade.finalrating != 'null' ? grade.finalrating : '',
+            done ? grade.actiontaken : '',
+          ),
+        );
+      }
+      if (second) {
+        final done = grade.q3status == '4' && grade.q4status == '4';
+        summaries.add(
+          _Summary(
+            both ? 'Final rating, 2nd semester' : 'Final rating',
+            done && grade.finalrating != 'null' ? grade.finalrating : '',
+            done ? grade.actiontaken : '',
+          ),
+        );
+      }
+    } else {
+      // The school's own periods: four quarters, or three terms (the 4th slot is then unused and
+      // must not hold back the final rating).
+      final values = [grade.q1, grade.q2, grade.q3, grade.q4];
+      final statuses = [grade.q1status, grade.q2status, grade.q3status, grade.q4status];
+      for (final p in _grading.periods) {
+        cells.add(_Cell(p.label, _period(values[p.no - 1], statuses[p.no - 1])));
+      }
+      final all = _grading.periods.every((p) => statuses[p.no - 1] == '4');
+      summaries.add(
+        _Summary(
+          'Final rating',
+          all && grade.finalrating != 'null' ? grade.finalrating : '',
+          all ? grade.actiontaken : '',
+        ),
+      );
+    }
+
+    return _SubjectCard(
+      code: grade.subjcode,
+      title: grade.subjdesc,
+      cells: cells,
+      summaries: summaries,
     );
   }
 
-  Widget _buildTabContentCoreValues() {
-    return Padding(
-      padding: const EdgeInsets.only(top: 20.0),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          return RawScrollbar(
-            controller: _verticalScrollController,
-            thumbVisibility: true,
-            thumbColor: Colors.grey,
-            thickness: 8.0,
-            radius: const Radius.circular(10),
-            child: SingleChildScrollView(
-              controller: _verticalScrollController,
-              scrollDirection: Axis.vertical,
-              child: SingleChildScrollView(
-                controller: _horizontalScrollController,
-                scrollDirection: Axis.horizontal,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(minWidth: constraints.maxWidth),
-                  child: _isLoadingCoreValues
-                      ? const Center(
-                          child: CircularProgressIndicator(
-                            semanticsLabel: 'Loading...',
-                          ),
-                        )
-                      : DataTable(
-                          columns: const [
-                            DataColumn(
-                              label: Text(
-                                'Description',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.black,
-                                  fontSize: 11,
-                                ),
-                              ),
-                            ),
-                            DataColumn(
-                              label: Text(
-                                'Q1',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.black,
-                                  fontSize: 11,
-                                ),
-                              ),
-                            ),
-                            DataColumn(
-                              label: Text(
-                                'Q2',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.black,
-                                  fontSize: 11,
-                                ),
-                              ),
-                            ),
-                            DataColumn(
-                              label: Text(
-                                'Q3',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.black,
-                                  fontSize: 11,
-                                ),
-                              ),
-                            ),
-                            DataColumn(
-                              label: Text(
-                                'Q4',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.black,
-                                  fontSize: 11,
-                                ),
-                              ),
-                            ),
-                          ],
-                          rows: _setup.map((setup) {
-                            final studentObserved = _studentObservedValues
-                                .firstWhere(
-                                  (obs) => obs.gsdid == setup.id,
-                                  orElse: () => StudentObservedValues(
-                                    gsdid: setup.id,
-                                    q1eval: 0,
-                                    q2eval: 0,
-                                    q3eval: 0,
-                                    q4eval: 0,
-                                  ),
-                                );
+  // ---------------------------------------------------------------------------
+  // Attendance
+  // ---------------------------------------------------------------------------
 
-                            String getRatingValue(int evalId) {
-                              return _ratingValues
-                                  .firstWhere(
-                                    (rating) => rating.id == evalId,
-                                    orElse: () => RatingValues(
-                                      id: 0,
-                                      sort: '',
-                                      gsid: 0,
-                                      description: '',
-                                      value: '',
-                                    ),
-                                  )
-                                  .value;
-                            }
+  List<Widget> _attendanceChildren() {
+    if (_isLoadingAttendance) return const [_LoadingBlocks()];
+    if (attendance.isEmpty) {
+      return const [
+        Padding(
+          padding: EdgeInsets.only(top: Gap.xxl),
+          child: EmptyState(
+            title: 'No attendance records',
+            message: 'Attendance has not been recorded for this school year.',
+            icon: LucideIcons.calendarDays,
+          ),
+        ),
+      ];
+    }
 
-                            return DataRow(
-                              cells: [
-                                DataCell(
-                                  Container(
-                                    width: 300,
-                                    child: Text(
-                                      setup.description,
-                                      style: const TextStyle(
-                                        color: Colors.black,
-                                        fontSize: 11,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                      maxLines: 3,
-                                    ),
-                                  ),
-                                ),
-                                DataCell(
-                                  Text(
-                                    getRatingValue(studentObserved.q1eval),
-                                    softWrap: false,
-                                  ),
-                                ),
-                                DataCell(
-                                  Text(
-                                    getRatingValue(studentObserved.q2eval),
-                                    softWrap: false,
-                                  ),
-                                ),
-                                DataCell(
-                                  Text(
-                                    getRatingValue(studentObserved.q3eval),
-                                    softWrap: false,
-                                  ),
-                                ),
-                                DataCell(
-                                  Text(
-                                    getRatingValue(studentObserved.q4eval),
-                                    softWrap: false,
-                                  ),
-                                ),
-                              ],
-                            );
-                          }).toList(),
-                        ),
+    final totalDays = attendance.fold(0, (sum, record) => sum + record.days);
+    final totalPresent = attendance.fold(0, (sum, record) => sum + record.present);
+    final totalAbsent = attendance.fold(0, (sum, record) => sum + record.absent);
+    final theme = ShadTheme.of(context);
+
+    return [
+      AppCard(
+        child: Column(
+          children: [
+            const _AttendanceRow(
+              month: 'Month',
+              days: 'School days',
+              present: 'Present',
+              absent: 'Absent',
+              header: true,
+            ),
+            for (final record in attendance) ...[
+              Divider(height: Gap.lg, color: theme.colorScheme.border),
+              _AttendanceRow(
+                month: record.monthdesc,
+                days: record.days.toString(),
+                present: record.present.toString(),
+                absent: record.absent.toString(),
+              ),
+            ],
+            Divider(height: Gap.lg, color: theme.colorScheme.border),
+            _AttendanceRow(
+              month: 'Total',
+              days: totalDays.toString(),
+              present: totalPresent.toString(),
+              absent: totalAbsent.toString(),
+              bold: true,
+            ),
+          ],
+        ),
+      ),
+    ];
+  }
+
+  // ---------------------------------------------------------------------------
+  // Core values
+  // ---------------------------------------------------------------------------
+
+  List<Widget> _coreValuesChildren() {
+    if (_isLoadingCoreValues) return const [_LoadingBlocks()];
+    if (_setup.isEmpty) {
+      return const [
+        Padding(
+          padding: EdgeInsets.only(top: Gap.xxl),
+          child: EmptyState(
+            title: 'No core values recorded',
+            message: 'Observed values have not been entered for this school year.',
+            icon: LucideIcons.clipboardList,
+          ),
+        ),
+      ];
+    }
+
+    String ratingValue(int evalId) {
+      return _ratingValues
+          .firstWhere(
+            (rating) => rating.id == evalId,
+            orElse: () => RatingValues(id: 0, sort: '', gsid: 0, description: '', value: ''),
+          )
+          .value;
+    }
+
+    return [
+      for (final setup in _setup)
+        Builder(
+          builder: (context) {
+            final observed = _studentObservedValues.firstWhere(
+              (obs) => obs.gsdid == setup.id,
+              orElse: () => StudentObservedValues(
+                gsdid: setup.id,
+                q1eval: 0,
+                q2eval: 0,
+                q3eval: 0,
+                q4eval: 0,
+              ),
+            );
+            return _SubjectCard(
+              code: '',
+              title: setup.description,
+              cells: [
+                _Cell('Q1', ratingValue(observed.q1eval)),
+                _Cell('Q2', ratingValue(observed.q2eval)),
+                _Cell('Q3', ratingValue(observed.q3eval)),
+                _Cell('Q4', ratingValue(observed.q4eval)),
+              ],
+              summaries: const [],
+            );
+          },
+        ),
+    ];
+  }
+}
+
+class _Cell {
+  const _Cell(this.label, this.value);
+  final String label;
+  final String value;
+}
+
+class _Summary {
+  const _Summary(this.label, this.value, this.remark);
+  final String label;
+  final String value;
+  final String remark;
+}
+
+/// One subject (or core value): code and title, a grid of period grades, then the final
+/// rating with its remark. Wraps to the card width, never scrolls sideways.
+class _SubjectCard extends StatelessWidget {
+  const _SubjectCard({
+    required this.code,
+    required this.title,
+    required this.cells,
+    required this.summaries,
+  });
+
+  final String code;
+  final String title;
+  final List<_Cell> cells;
+  final List<_Summary> summaries;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = ShadTheme.of(context);
+    final text = theme.textTheme;
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (code.isNotEmpty) Text(code, style: text.muted),
+          Text(
+            title,
+            style: text.p.copyWith(fontWeight: FontWeight.w600),
+            maxLines: 4,
+            overflow: TextOverflow.ellipsis,
+          ),
+          if (cells.isNotEmpty) ...[
+            Gap.hMd,
+            Row(
+              children: [
+                for (var i = 0; i < cells.length; i++) ...[
+                  if (i > 0) Gap.wSm,
+                  Expanded(child: _GradeCell(cell: cells[i])),
+                ],
+              ],
+            ),
+          ],
+          for (final summary in summaries) ...[
+            Gap.hMd,
+            Divider(height: 1, color: theme.colorScheme.border),
+            Gap.hMd,
+            Row(
+              children: [
+                Expanded(
+                  child: Text(summary.label, style: text.muted),
                 ),
+                Gap.wSm,
+                Text(
+                  summary.value.isEmpty ? '—' : summary.value,
+                  style: text.h4.copyWith(
+                    color: summary.value.isEmpty
+                        ? theme.colorScheme.mutedForeground
+                        : theme.colorScheme.foreground,
+                  ),
+                ),
+                if (summary.remark.isNotEmpty) ...[
+                  Gap.wSm,
+                  StatusBadge(
+                    summary.remark,
+                    status: summary.remark == 'PASSED' ? AppStatus.success : AppStatus.danger,
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _GradeCell extends StatelessWidget {
+  const _GradeCell({required this.cell});
+
+  final _Cell cell;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = ShadTheme.of(context);
+    final text = theme.textTheme;
+    final empty = cell.value.trim().isEmpty;
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: Gap.sm, horizontal: Gap.xs),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.muted,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(cell.label, style: text.muted),
+          ),
+          Gap.hXs,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              empty ? '—' : cell.value.trim(),
+              style: text.p.copyWith(
+                fontWeight: FontWeight.w600,
+                color: empty ? theme.colorScheme.mutedForeground : theme.colorScheme.foreground,
               ),
             ),
-          );
-        },
+          ),
+        ],
       ),
+    );
+  }
+}
+
+class _AttendanceRow extends StatelessWidget {
+  const _AttendanceRow({
+    required this.month,
+    required this.days,
+    required this.present,
+    required this.absent,
+    this.header = false,
+    this.bold = false,
+  });
+
+  final String month;
+  final String days;
+  final String present;
+  final String absent;
+  final bool header;
+  final bool bold;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = ShadTheme.of(context).textTheme;
+    final style = header
+        ? text.muted
+        : (bold ? text.p.copyWith(fontWeight: FontWeight.w600) : text.p);
+    Widget cell(String value, int flex, {TextAlign align = TextAlign.end}) => Expanded(
+      flex: flex,
+      child: Text(value, style: style, textAlign: align, maxLines: 2, overflow: TextOverflow.ellipsis),
+    );
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        cell(month, 3, align: TextAlign.start),
+        cell(days, 2),
+        cell(present, 2),
+        cell(absent, 2),
+      ],
+    );
+  }
+}
+
+class _LoadingBlocks extends StatelessWidget {
+  const _LoadingBlocks();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Column(
+      children: [
+        SkeletonBox(height: 96, radius: 12),
+        Gap.hMd,
+        SkeletonBox(height: 96, radius: 12),
+        Gap.hMd,
+        SkeletonBox(height: 96, radius: 12),
+      ],
+    );
+  }
+}
+
+/// Labelled shadcn select. Rebuilds when [value] changes from outside (year changes the
+/// semester), because [ShadSelect] only reads its initial value once.
+class _FieldSelect extends StatelessWidget {
+  const _FieldSelect({
+    required this.label,
+    required this.value,
+    required this.options,
+    required this.onChanged,
+  });
+
+  final String label;
+  final String? value;
+  final List<(String, String)> options;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = ShadTheme.of(context).textTheme;
+    String labelOf(String v) {
+      for (final o in options) {
+        if (o.$1 == v) return o.$2;
+      }
+      return v;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: text.small),
+        Gap.hXs,
+        LayoutBuilder(
+          builder: (context, constraints) => ShadSelect<String>(
+            key: ValueKey('$label-$value-${options.length}'),
+            minWidth: constraints.maxWidth,
+            maxWidth: constraints.maxWidth,
+            placeholder: Text('Select ${label.toLowerCase()}'),
+            initialValue: value,
+            options: [
+              for (final o in options) ShadOption<String>(value: o.$1, child: Text(o.$2)),
+            ],
+            selectedOptionBuilder: (context, v) =>
+                Text(labelOf(v), maxLines: 1, overflow: TextOverflow.ellipsis),
+            onChanged: (v) {
+              if (v != null) onChanged(v);
+            },
+          ),
+        ),
+      ],
     );
   }
 }
