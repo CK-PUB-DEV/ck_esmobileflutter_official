@@ -299,10 +299,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     onPressed: () => _logout(context),
                     width: double.infinity,
                     height: kMinTap + 4,
-                    leading: const Icon(
-                      LucideIcons.logOut,
-                      size: IconSize.row,
-                    ),
+                    leading: const Icon(LucideIcons.logOut, size: IconSize.row),
                     child: const Text('Log out'),
                   ),
                 ],
@@ -321,10 +318,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       widget.user.suffix,
     ].where((part) => part != null && part.trim().isNotEmpty).join(' ');
     final schoolName = schoolInfo.isEmpty ? '' : schoolInfo.first.schoolname;
-    final imageUrl =
-        pic != null && user.picurl != null && user.picurl!.isNotEmpty
-        ? Uri.parse(pic!).resolve(user.picurl!).toString()
-        : null;
+    final imageUrl = _studentImageUrl();
 
     return AppCard(
       padding: const EdgeInsets.all(Gap.xl),
@@ -341,18 +335,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             child: ClipOval(
               child: imageUrl == null
-                  ? Image.asset('assets/anonymous.jpg', fit: BoxFit.cover)
+                  ? _buildStudentAvatar()
                   : CachedNetworkImage(
                       imageUrl: imageUrl,
                       fit: BoxFit.cover,
-                      placeholder: (context, url) => Image.asset(
-                        'assets/anonymous.jpg',
-                        fit: BoxFit.cover,
-                      ),
-                      errorWidget: (context, url, error) => Image.asset(
-                        'assets/anonymous.jpg',
-                        fit: BoxFit.cover,
-                      ),
+                      placeholder: (context, url) => _buildStudentAvatar(),
+                      errorWidget: (context, url, error) =>
+                          _buildStudentAvatar(),
                     ),
             ),
           ),
@@ -385,6 +374,40 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  String? _studentImageUrl() {
+    final path = widget.user.picurl?.trim() ?? '';
+    if (path.isEmpty || path.toLowerCase() == 'null') return null;
+    final uri = Uri.tryParse(path);
+    if (uri == null) return null;
+    if (uri.hasScheme) {
+      return (uri.scheme == 'http' || uri.scheme == 'https') &&
+              uri.host.isNotEmpty
+          ? uri.toString()
+          : null;
+    }
+    final base = Uri.tryParse(pic?.trim() ?? '');
+    if (base == null ||
+        !['http', 'https'].contains(base.scheme) ||
+        base.host.isEmpty) {
+      return null;
+    }
+    return base.resolveUri(uri).toString();
+  }
+
+  Widget _buildStudentAvatar() {
+    final sex = widget.user.gender?.trim().toLowerCase();
+    final icon = switch (sex) {
+      'female' || 'f' => Icons.face_3,
+      'male' || 'm' => Icons.face,
+      _ => Icons.person,
+    };
+    final scheme = ShadTheme.of(context).colorScheme;
+    return ColoredBox(
+      color: scheme.muted,
+      child: Center(child: Icon(icon, size: 44, color: scheme.mutedForeground)),
     );
   }
 
