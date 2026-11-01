@@ -1,12 +1,10 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:pushtrial/api/api.dart';
 import 'package:pushtrial/models/ledger_v2.dart';
 import 'package:pushtrial/models/school_info.dart';
 import 'package:pushtrial/models/year_sem.dart';
 import 'package:pushtrial/widgets/ui/ui.dart';
-import 'package:screen_protector/screen_protector.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -53,13 +51,12 @@ class _BillingInformationV2PageState extends State<BillingInformationV2Page> {
   @override
   void initState() {
     super.initState();
-    if (!kDebugMode) ScreenProtector.preventScreenshotOn(); // debug builds stay capturable for testing
+    // Screenshots are blocked app-wide in main.dart (release builds), so nothing to switch here.
     _init();
   }
 
   @override
   void dispose() {
-    ScreenProtector.preventScreenshotOff();
     _tabs.dispose();
     super.dispose();
   }

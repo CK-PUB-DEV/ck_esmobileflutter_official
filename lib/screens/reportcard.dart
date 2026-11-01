@@ -314,16 +314,19 @@ class _ReportCardScreenState extends State<ReportCardScreen> {
 
     final response = await CallApi().getStudentAttendance(id, selectedYear);
 
-    if (response.body is List) {
-      attendance = (response.body as List)
-          .map((data) => Attendance.fromJson(data))
-          .toList();
-    } else if (response.body is String) {
-      final Map<String, dynamic> responseData = json.decode(response.body);
-
-      attendance = (responseData['attendance_setup'] as List)
-          .map((data) => Attendance.fromJson(data))
-          .toList();
+    // The server answers {"attendance_setup": [...]} for an enrolled student, and a bare list
+    // ([{"att_setup": []}]) when there is no basic-ed or senior-high enrollment that year
+    // (college students, for example): that means no attendance to show.
+    attendance = [];
+    try {
+      final decoded = json.decode(response.body);
+      if (decoded is Map && decoded['attendance_setup'] is List) {
+        attendance = (decoded['attendance_setup'] as List)
+            .map((data) => Attendance.fromJson(data))
+            .toList();
+      }
+    } catch (_) {
+      // Not JSON (an error page): leave attendance empty.
     }
 
     setState(() {
@@ -336,19 +339,24 @@ class _ReportCardScreenState extends State<ReportCardScreen> {
       _isLoadingCoreValues = true;
     });
     final response = await CallApi().getObservedValues(id, selectedYear);
-    final Map<String, dynamic> responseData = json.decode(response.body);
+    // Like attendance: an object for an enrolled student, a one-item list of empty values
+    // otherwise. Read the first item in that case.
+    Map<String, dynamic> responseData = const {};
+    try {
+      final decoded = json.decode(response.body);
+      if (decoded is Map<String, dynamic>) {
+        responseData = decoded;
+      } else if (decoded is List && decoded.isNotEmpty && decoded.first is Map<String, dynamic>) {
+        responseData = decoded.first as Map<String, dynamic>;
+      }
+    } catch (_) {}
 
-    _ratingValues = (responseData['ob_rv'] as List)
-        .map((data) => RatingValues.fromJson(data))
-        .toList();
+    List listOf(String key) => responseData[key] is List ? responseData[key] as List : const [];
 
-    _setup = (responseData['ob_setup'] as List)
-        .map((data) => Setup.fromJson(data))
-        .toList();
-
-    _studentObservedValues = (responseData['student_ob'] as List)
-        .map((data) => StudentObservedValues.fromJson(data))
-        .toList();
+    _ratingValues = listOf('ob_rv').map((data) => RatingValues.fromJson(data)).toList();
+    _setup = listOf('ob_setup').map((data) => Setup.fromJson(data)).toList();
+    _studentObservedValues =
+        listOf('student_ob').map((data) => StudentObservedValues.fromJson(data)).toList();
 
     setState(() {
       _isLoadingCoreValues = false;
