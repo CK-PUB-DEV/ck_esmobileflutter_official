@@ -9,3 +9,4 @@ export 'app_page.dart';
 export 'app_spacing.dart';
 export 'app_states.dart';
 export 'app_widgets.dart';
+export 'essentiel_mark.dart';

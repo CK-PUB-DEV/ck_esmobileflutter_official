@@ -20,6 +20,9 @@ class SchoolScreen extends StatefulWidget {
 }
 
 class _SchoolScreenState extends State<SchoolScreen> {
+  // Essentiel's own colour, the same one the login screen falls back to.
+  static const _brandRed = Color(0xFFD71920);
+
   final TextEditingController searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final String host = SchoolApi().getImage();
@@ -127,118 +130,214 @@ class _SchoolScreenState extends State<SchoolScreen> {
     super.dispose();
   }
 
+  Color _shade(Color color, double lightnessDelta) {
+    final hsl = HSLColor.fromColor(color);
+    return hsl
+        .withLightness((hsl.lightness + lightnessDelta).clamp(0.0, 1.0))
+        .toColor();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
+    final scheme = ShadTheme.of(context).colorScheme;
+    final headerStart = _shade(_brandRed, -0.02);
+    final headerEnd = _shade(_brandRed, -0.16);
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
+      // The header is always dark red, so the status bar icons are always light.
+      value: SystemUiOverlayStyle.light,
       child: Scaffold(
-        backgroundColor: ShadTheme.of(context).colorScheme.background,
-        body: SafeArea(
-          child: Column(
-            children: [
-              _buildHeader(),
-              Expanded(child: _buildDirectory()),
-            ],
-          ),
+        // Shows behind the rounded top corners of the list, so it matches the header's end.
+        backgroundColor: headerEnd,
+        body: Column(
+          children: [
+            _buildHeader(headerStart, headerEnd),
+            Expanded(
+              child: ClipRRect(
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+                child: ColoredBox(
+                  color: scheme.background,
+                  child: _buildDirectory(),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(Color start, Color end) {
     final theme = ShadTheme.of(context);
     final scheme = theme.colorScheme;
     final text = theme.textTheme;
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 1100),
+    const onHeader = Colors.white;
+    const searchRadius = BorderRadius.all(Radius.circular(16));
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [start, end],
+        ),
+      ),
+      child: CustomPaint(
+        painter: const _HeaderDecorPainter(Color(0x1AFFFFFF)),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(Gap.lg, Gap.lg, Gap.lg, Gap.sm),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              AnimatedSize(
-                duration: const Duration(milliseconds: 180),
-                alignment: Alignment.topCenter,
-                child: keyboardOpen
-                    ? const SizedBox.shrink()
-                    : Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                width: 32,
-                                height: 32,
-                                decoration: BoxDecoration(
-                                  color: scheme.primary,
-                                  borderRadius: theme.radius,
-                                ),
+          padding: EdgeInsets.fromLTRB(
+            Gap.lg,
+            MediaQuery.paddingOf(context).top + Gap.sm,
+            Gap.lg,
+            Gap.lg + Gap.xs,
+          ),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1100),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const EssentielMark(size: 52),
+                      const Spacer(),
+                      ListenableBuilder(
+                        listenable: AppThemeController.instance,
+                        builder: (context, child) => Semantics(
+                          button: true,
+                          label: AppThemeController.instance.isDark
+                              ? 'Switch to light mode'
+                              : 'Switch to dark mode',
+                          child: Material(
+                            color: Colors.white.withValues(alpha: 0.16),
+                            shape: const CircleBorder(),
+                            child: InkWell(
+                              customBorder: const CircleBorder(),
+                              onTap: _toggleTheme,
+                              child: SizedBox(
+                                width: 44,
+                                height: 44,
                                 child: Icon(
-                                  LucideIcons.graduationCap,
-                                  color: scheme.primaryForeground,
+                                  AppThemeController.instance.isDark
+                                      ? LucideIcons.sun
+                                      : LucideIcons.moon,
+                                  color: onHeader,
                                   size: IconSize.row,
                                 ),
                               ),
-                              Gap.wSm,
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 250),
+                    curve: Curves.easeOutCubic,
+                    alignment: Alignment.topLeft,
+                    child: keyboardOpen
+                        ? const SizedBox(width: double.infinity)
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Gap.hXl,
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: Gap.md,
+                                  vertical: 5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.16),
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Text('Essentiel', style: text.large),
-                                    Text('Student portal', style: text.muted),
+                                    const Icon(
+                                      LucideIcons.users,
+                                      size: 14,
+                                      color: onHeader,
+                                    ),
+                                    Gap.wSm,
+                                    Text(
+                                      'Student & Parent Portal',
+                                      style: text.small.copyWith(
+                                        color: onHeader,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
-                              ListenableBuilder(
-                                listenable: AppThemeController.instance,
-                                builder: (context, child) => Semantics(
-                                  button: true,
-                                  label: AppThemeController.instance.isDark
-                                      ? 'Switch to light mode'
-                                      : 'Switch to dark mode',
-                                  child: ShadIconButton.outline(
-                                    onPressed: _toggleTheme,
-                                    icon: Icon(
-                                      AppThemeController.instance.isDark
-                                          ? LucideIcons.sun
-                                          : LucideIcons.moon,
-                                      size: IconSize.row,
-                                    ),
-                                  ),
+                              Gap.hMd,
+                              Text(
+                                'Find your school',
+                                style: text.h2.copyWith(
+                                  color: onHeader,
+                                  fontWeight: FontWeight.w800,
                                 ),
                               ),
+                              Gap.hXs,
+                              Text(
+                                'Choose your school to sign in and follow grades, attendance and billing.',
+                                style: text.muted.copyWith(
+                                  color: onHeader.withValues(alpha: 0.85),
+                                ),
+                              ),
+                              Gap.hLg,
                             ],
                           ),
-                          Gap.hXl,
-                          Text('Find your school', style: text.h2),
-                          Gap.hXs,
-                          Text(
-                            'Choose your school to continue to your student portal.',
-                            style: text.muted,
+                  ),
+                  if (keyboardOpen) Gap.hMd,
+                  ShadInput(
+                    controller: searchController,
+                    textInputAction: TextInputAction.search,
+                    placeholder: const Text('Search by school name or code'),
+                    leading: Icon(
+                      LucideIcons.search,
+                      size: IconSize.row,
+                      color: scheme.mutedForeground,
+                    ),
+                    trailing: searchController.text.isEmpty
+                        ? null
+                        : ShadButton.ghost(
+                            onPressed: searchController.clear,
+                            child: Icon(
+                              LucideIcons.x,
+                              size: IconSize.inline,
+                              color: scheme.mutedForeground,
+                            ),
                           ),
-                          Gap.hLg,
-                        ],
+                    decoration: ShadDecoration(
+                      color: scheme.card,
+                      border: const ShadBorder.fromBorderSide(
+                        ShadBorderSide(color: Colors.transparent, width: 1.5),
+                        radius: searchRadius,
                       ),
-              ),
-              ShadInput(
-                controller: searchController,
-                textInputAction: TextInputAction.search,
-                placeholder: const Text('Search schools'),
-                leading: const Icon(LucideIcons.search, size: IconSize.row),
-                trailing: searchController.text.isEmpty
-                    ? null
-                    : ShadButton.ghost(
-                        onPressed: searchController.clear,
-                        child: const Icon(
-                          LucideIcons.x,
-                          size: IconSize.inline,
+                      focusedBorder: ShadBorder.fromBorderSide(
+                        ShadBorderSide(color: scheme.primary, width: 1.5),
+                        radius: searchRadius,
+                      ),
+                      // The soft ring around the focused field, white so it shows on the red.
+                      secondaryFocusedBorder: ShadBorder.fromBorderSide(
+                        ShadBorderSide(
+                          color: Colors.white.withValues(alpha: 0.35),
+                          width: 4,
                         ),
+                        radius: const BorderRadius.all(Radius.circular(20)),
                       ),
+                      shadows: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.18),
+                          blurRadius: 18,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -247,6 +346,7 @@ class _SchoolScreenState extends State<SchoolScreen> {
 
   Widget _buildDirectory() {
     final theme = ShadTheme.of(context);
+    final scheme = theme.colorScheme;
     final text = theme.textTheme;
     if (loading) return const LoadingSkeleton();
     if (hasLoadError) {
@@ -276,6 +376,7 @@ class _SchoolScreenState extends State<SchoolScreen> {
         ],
       );
     }
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 1100),
@@ -288,8 +389,9 @@ class _SchoolScreenState extends State<SchoolScreen> {
                 ? 3
                 : 2;
             final textScale = MediaQuery.textScalerOf(context).scale(1);
+            final count = filteredSchoolNames.length;
             return RefreshIndicator(
-              color: theme.colorScheme.primary,
+              color: scheme.primary,
               onRefresh: () => _initializeData(showLoading: false),
               child: CustomScrollView(
                 controller: _scrollController,
@@ -298,37 +400,58 @@ class _SchoolScreenState extends State<SchoolScreen> {
                   SliverPadding(
                     padding: const EdgeInsets.fromLTRB(
                       Gap.lg,
-                      Gap.md,
+                      Gap.xl,
                       Gap.lg,
                       Gap.md,
                     ),
                     sliver: SliverToBoxAdapter(
                       child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text('Schools', style: text.large),
-                          Text(
-                            '${filteredSchoolNames.length} ${filteredSchoolNames.length == 1 ? 'school' : 'schools'}',
-                            style: text.muted,
+                          Expanded(
+                            child: Text(
+                              searchController.text.trim().isEmpty
+                                  ? 'All schools'
+                                  : 'Results',
+                              style: text.large.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: Gap.md,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: scheme.primary.withValues(alpha: 0.10),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              '$count ${count == 1 ? 'school' : 'schools'}',
+                              style: text.small.copyWith(
+                                color: scheme.primary,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
                           ),
                         ],
                       ),
                     ),
                   ),
                   SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(
+                    padding: EdgeInsets.fromLTRB(
                       Gap.lg,
                       0,
                       Gap.lg,
-                      Gap.xl,
+                      Gap.xl + bottomInset,
                     ),
                     sliver: SliverGrid.builder(
-                      itemCount: filteredSchoolNames.length,
+                      itemCount: count,
                       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: columns,
                         crossAxisSpacing: Gap.md,
                         mainAxisSpacing: Gap.md,
-                        mainAxisExtent: 184 + (textScale - 1) * 80,
+                        mainAxisExtent: 200 + (textScale - 1) * 80,
                       ),
                       itemBuilder: (context, index) =>
                           _buildSchoolCard(filteredSchoolNames[index]),
@@ -347,71 +470,137 @@ class _SchoolScreenState extends State<SchoolScreen> {
     final theme = ShadTheme.of(context);
     final scheme = theme.colorScheme;
     final text = theme.textTheme;
+    final radius = BorderRadius.circular(22);
     return Semantics(
       button: true,
       label: 'Open ${school.schoolname}',
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: selectingSchool ? null : () => _selectSchool(school),
-        child: ShadCard(
-          padding: Gap.card,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 56,
-                height: 56,
-                padding: const EdgeInsets.all(Gap.xs),
-                decoration: BoxDecoration(
-                  color: scheme.muted,
-                  borderRadius: theme.radius,
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(Gap.sm),
-                  child: school.schoollogo.isEmpty
-                      ? _fallbackLogo()
-                      : CachedNetworkImage(
-                          imageUrl: '$host${school.schoollogo}',
-                          fit: BoxFit.contain,
-                          placeholder: (context, url) => _fallbackLogo(),
-                          errorWidget: (context, url, error) => _fallbackLogo(),
-                        ),
-                ),
-              ),
-              Gap.hMd,
-              Text(
-                school.schoolname,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: text.small.copyWith(fontWeight: FontWeight.w600),
-              ),
-              const Spacer(),
-              Row(
+      child: Container(
+        decoration: BoxDecoration(
+          color: scheme.card,
+          borderRadius: radius,
+          border: Border.all(color: scheme.border),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 18,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Material(
+          type: MaterialType.transparency,
+          borderRadius: radius,
+          child: InkWell(
+            borderRadius: radius,
+            onTap: selectingSchool ? null : () => _selectSchool(school),
+            child: Padding(
+              padding: const EdgeInsets.all(Gap.lg),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: ShadBadge.secondary(
-                      child: Text(
-                        school.schoolabrv.isEmpty ? 'School' : school.schoolabrv,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                  Container(
+                    width: 60,
+                    height: 60,
+                    padding: const EdgeInsets.all(Gap.sm),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: scheme.border),
+                    ),
+                    child: ClipOval(
+                      child: school.schoollogo.isEmpty
+                          ? _fallbackLogo()
+                          : CachedNetworkImage(
+                              imageUrl: '$host${school.schoollogo}',
+                              fit: BoxFit.contain,
+                              placeholder: (context, url) => _fallbackLogo(),
+                              errorWidget: (context, url, error) =>
+                                  _fallbackLogo(),
+                            ),
                     ),
                   ),
-                  Gap.wSm,
-                  Icon(
-                    LucideIcons.chevronRight,
-                    color: scheme.mutedForeground,
-                    size: IconSize.row,
+                  Gap.hMd,
+                  Text(
+                    school.schoolname,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: text.small.copyWith(
+                      fontWeight: FontWeight.w700,
+                      height: 1.3,
+                    ),
+                  ),
+                  const Spacer(),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: Gap.md,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: scheme.primary.withValues(alpha: 0.10),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            school.schoolabrv.isEmpty ? 'School' : school.schoolabrv,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: text.small.copyWith(
+                              color: scheme.primary,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                        ),
+                      ),
+                      Gap.wSm,
+                      Container(
+                        width: 30,
+                        height: 30,
+                        decoration: BoxDecoration(
+                          color: scheme.primary,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          LucideIcons.arrowRight,
+                          color: scheme.primaryForeground,
+                          size: IconSize.inline,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
-            ],
+            ),
           ),
         ),
       ),
     );
   }
 
+  // A school without a logo of its own shows the Essentiel logo.
   Widget _fallbackLogo() =>
-      Image.asset('assets/cklogo.png', fit: BoxFit.contain);
+      const Padding(padding: EdgeInsets.all(Gap.xs), child: EssentielEmblem());
+}
+
+/// Soft translucent circles on the header, the same decoration the login screen uses.
+class _HeaderDecorPainter extends CustomPainter {
+  const _HeaderDecorPainter(this.color);
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = color;
+    canvas.drawCircle(Offset(size.width * 0.94, size.height * 0.12), 80, paint);
+    canvas.drawCircle(Offset(size.width * 0.04, size.height * 0.46), 54, paint);
+    canvas.drawCircle(Offset(size.width * 0.76, size.height * 0.34), 34, paint);
+  }
+
+  @override
+  bool shouldRepaint(_HeaderDecorPainter oldDelegate) => oldDelegate.color != color;
 }

@@ -26,6 +26,11 @@ class AppConfig {
   /// A release can opt out with `--dart-define=ALLOW_HTTP=true`.
   static const bool allowHttp = !kReleaseMode || bool.fromEnvironment('ALLOW_HTTP');
 
+  /// Release builds block screenshots and screen recording. Debug builds allow them so screens
+  /// can be captured while testing. A release can opt in with `--dart-define=ALLOW_SCREEN_CAPTURE=true`
+  /// (for example to record the video Google Play asks for). Never use it for a store build.
+  static const bool allowScreenCapture = kDebugMode || bool.fromEnvironment('ALLOW_SCREEN_CAPTURE');
+
   static String secureUrl(String url) => allowHttp
       ? url
       : url.replaceFirst(RegExp(r'^http://', caseSensitive: false), 'https://');

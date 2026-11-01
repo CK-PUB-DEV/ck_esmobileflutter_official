@@ -801,6 +801,34 @@ class CallApi {
     return fullUrl;
   }
 
+  /// Which student services this school uses (teacher evaluation, clearance, scholarship).
+  /// Only v2 servers can tell: null on v1.
+  Future<http.Response?> getStudentServices() async {
+    await _ensureDomainInitialized();
+    if (!_v2) return null;
+    return await http.get(Uri.parse('${_mainDomain}api/mobile/v2/services'));
+  }
+
+  /// The teacher evaluation form and the student's classes for one term (the current one when
+  /// [syid]/[semid] are null). v2 only: null on v1.
+  Future<http.Response?> getTeacherEvaluation({int? syid, int? semid}) async {
+    await _ensureDomainInitialized();
+    if (!_v2) return null;
+    final url = Uri.parse('${_mainDomain}api/mobile/v2/teacher_evaluation').replace(
+      queryParameters: syid != null && semid != null ? {'syid': '$syid', 'semid': '$semid'} : null,
+    );
+    return await http.get(url);
+  }
+
+  Future<http.Response> submitTeacherEvaluation(Map<String, dynamic> evaluation) async {
+    await _ensureDomainInitialized();
+    return await http.post(
+      Uri.parse('${_mainDomain}api/mobile/v2/teacher_evaluation'),
+      headers: const {'Content-Type': 'application/json', 'Accept': 'application/json'},
+      body: jsonEncode(evaluation),
+    );
+  }
+
   getPublicData(apiUrl) async {
     await _ensureDomainInitialized();
     var fullUrl = _esDomain + apiUrl;

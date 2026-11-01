@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:pushtrial/models/year_sem.dart';
 import 'package:pushtrial/widgets/ui/ui.dart';
@@ -9,7 +8,6 @@ import 'package:pushtrial/models/ledger.dart';
 import 'dart:convert';
 import 'package:pushtrial/models/school_info.dart';
 import 'package:pushtrial/models/enrolled_stud.dart';
-import 'package:screen_protector/screen_protector.dart';
 
 class BillingInformationPage extends StatefulWidget {
   const BillingInformationPage({super.key});
@@ -42,18 +40,12 @@ class BillingInformationState extends State<BillingInformationPage> {
   @override
   void initState() {
     super.initState();
-    if (!kDebugMode) ScreenProtector.preventScreenshotOn(); // debug builds stay capturable for testing
+    // Screenshots are blocked app-wide in main.dart (release builds), so nothing to switch here.
     getUser();
     getSchoolInfo();
     getYearandSem();
 
     print('levelid: $levelid');
-  }
-
-  @override
-  void dispose() {
-    ScreenProtector.preventScreenshotOff();
-    super.dispose();
   }
 
   Color hexToColor(String hexString) {

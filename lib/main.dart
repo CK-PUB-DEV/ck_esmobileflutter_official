@@ -91,8 +91,8 @@ Future<void> _main() async {
   await _upgradeSavedSchoolToHttps();
   await AppThemeController.instance.load();
   // Debug builds skip the screenshot block so screens can be captured while testing;
-  // release builds stay protected.
-  if (!kIsWeb && !kDebugMode) {
+  // release builds stay protected unless built with ALLOW_SCREEN_CAPTURE.
+  if (!kIsWeb && !AppConfig.allowScreenCapture) {
     await ScreenProtector.preventScreenshotOn();
     await ScreenProtector.protectDataLeakageOn();
   }

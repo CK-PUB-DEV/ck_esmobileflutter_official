@@ -19,6 +19,12 @@ class PaymentPage extends StatefulWidget {
 }
 
 class PaymentPageState extends State<PaymentPage> {
+  // Slow responses can finish after the screen was closed; skip the update then.
+  @override
+  void setState(VoidCallback fn) {
+    if (mounted) super.setState(fn);
+  }
+
   static const _tabTransactions = 'transactions';
   static const _tabUploaded = 'uploaded';
   final ShadTabsController<String> _tabs = ShadTabsController(value: _tabTransactions);
