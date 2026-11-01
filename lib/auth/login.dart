@@ -232,11 +232,8 @@ class _LoginState extends State<LoginScreen> {
   }
 
   Widget _buildSchoolLogo() {
-    final fallback = Icon(
-      LucideIcons.graduationCap,
-      color: ShadTheme.of(context).colorScheme.primary,
-      size: 48,
-    );
+    // A school without a logo of its own shows the Essentiel logo.
+    final fallback = const EssentielEmblem();
     if (picurl == null || picurl!.trim().isEmpty || pic == null) return fallback;
     // Same address the app has always used: the school's domain followed by the stored path.
     // Uri.resolve would rewrite paths such as "../images/logo.png", so join them as text.
@@ -252,207 +249,454 @@ class _LoginState extends State<LoginScreen> {
     );
   }
 
+
+  Color _shade(Color color, double lightnessDelta) {
+    final hsl = HSLColor.fromColor(color);
+    return hsl
+        .withLightness((hsl.lightness + lightnessDelta).clamp(0.0, 1.0))
+        .toColor();
+  }
+
+  /// Rounded, softly filled field that turns to the school colour when focused.
+  ShadDecoration _fieldDecoration(ShadColorScheme scheme) {
+    const radius = BorderRadius.all(Radius.circular(14));
+    return ShadDecoration(
+      color: scheme.muted.withValues(alpha: 0.6),
+      border: ShadBorder.fromBorderSide(
+        ShadBorderSide(color: Colors.transparent, width: 1.5),
+        radius: radius,
+      ),
+      focusedBorder: ShadBorder.fromBorderSide(
+        ShadBorderSide(color: schoolColor, width: 1.5),
+        radius: radius,
+      ),
+      // The soft ring around a focused field: the school colour instead of the theme's red.
+      secondaryFocusedBorder: ShadBorder.fromBorderSide(
+        ShadBorderSide(color: schoolColor.withValues(alpha: 0.25), width: 4),
+        radius: const BorderRadius.all(Radius.circular(18)),
+      ),
+      errorBorder: ShadBorder.fromBorderSide(
+        ShadBorderSide(color: scheme.destructive, width: 1.5),
+        radius: radius,
+      ),
+    );
+  }
+
+  Widget _buildHeader({
+    required ShadTextTheme text,
+    required Color onHeader,
+    required Color headerStart,
+    required Color headerEnd,
+    required String schoolName,
+    required bool compact,
+  }) {
+    final top = MediaQuery.paddingOf(context).top;
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [headerStart, headerEnd],
+        ),
+      ),
+      child: CustomPaint(
+        painter: _HeaderDecorPainter(onHeader.withValues(alpha: 0.10)),
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            Gap.lg,
+            top + Gap.sm,
+            Gap.lg,
+            compact ? Gap.xxl + Gap.sm : 56,
+          ),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 460),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      const EssentielMark(size: 52),
+                      const Spacer(),
+                      TextButton.icon(
+                        onPressed: _changeSchool,
+                        style: TextButton.styleFrom(
+                          foregroundColor: onHeader,
+                          backgroundColor: onHeader.withValues(alpha: 0.14),
+                          shape: const StadiumBorder(),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: Gap.md,
+                            vertical: Gap.xs,
+                          ),
+                        ),
+                        icon: const Icon(LucideIcons.school, size: 16),
+                        label: const Text('Change school'),
+                      ),
+                    ],
+                  ),
+                  // The logo and name fold away while the keyboard is open, so the fields and
+                  // the Sign in button stay above it.
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 250),
+                    curve: Curves.easeOutCubic,
+                    alignment: Alignment.topCenter,
+                    child: compact
+                        ? const SizedBox(width: double.infinity)
+                        : Column(
+                            children: [
+                              Gap.hXl,
+                              Container(
+                                width: 104,
+                                height: 104,
+                                padding: const EdgeInsets.all(Gap.md),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: onHeader.withValues(alpha: 0.35),
+                                    width: 4,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.18),
+                                      blurRadius: 24,
+                                      offset: const Offset(0, 10),
+                                    ),
+                                  ],
+                                ),
+                                child: ClipOval(child: _buildSchoolLogo()),
+                              ),
+                              Gap.hLg,
+                              Text(
+                                schoolName.isEmpty ? 'Your school' : schoolName,
+                                textAlign: TextAlign.center,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: text.h4.copyWith(
+                                  color: onHeader,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              Gap.hSm,
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: Gap.md,
+                                  vertical: 5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: onHeader.withValues(alpha: 0.16),
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(LucideIcons.users, size: 14, color: onHeader),
+                                    Gap.wSm,
+                                    Text(
+                                      'Student & Parent Portal',
+                                      style: text.small.copyWith(
+                                        color: onHeader,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _featureTile(IconData icon, String label, ShadTextTheme text) {
+    return Expanded(
+      child: Column(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: schoolColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(icon, size: IconSize.row, color: schoolColor),
+          ),
+          Gap.hSm,
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: text.small.copyWith(fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildForm({
+    required ShadTextTheme text,
+    required ShadColorScheme scheme,
+    required bool compact,
+  }) {
+    final onButton =
+        schoolColor.computeLuminance() > 0.6 ? Colors.black : Colors.white;
+    final decoration = _fieldDecoration(scheme);
+    return Form(
+      key: _formKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Welcome back',
+            style: text.h3.copyWith(fontWeight: FontWeight.w800),
+          ),
+          Gap.hXs,
+          Text(
+            'Sign in to follow grades, attendance and billing.',
+            style: text.muted,
+          ),
+          Gap.hXl,
+          Text('Username', style: text.small),
+          Gap.hSm,
+          ShadInputFormField(
+            controller: _usernameController,
+            decoration: decoration,
+            textInputAction: TextInputAction.next,
+            autofillHints: const [AutofillHints.username],
+            placeholder: const Text('Enter your username'),
+            leading: Icon(
+              LucideIcons.user,
+              size: IconSize.row,
+              color: scheme.mutedForeground,
+            ),
+            validator: (value) =>
+                value.trim().isEmpty ? 'Please enter your username' : null,
+          ),
+          Gap.hLg,
+          Text('Password', style: text.small),
+          Gap.hSm,
+          ShadInputFormField(
+            controller: _passwordController,
+            decoration: decoration,
+            obscureText: _obscureText,
+            textInputAction: TextInputAction.done,
+            autofillHints: const [AutofillHints.password],
+            onSubmitted: (_) => _login(),
+            placeholder: const Text('Enter your password'),
+            leading: Icon(
+              LucideIcons.lock,
+              size: IconSize.row,
+              color: scheme.mutedForeground,
+            ),
+            trailing: Tooltip(
+              message: _obscureText ? 'Show password' : 'Hide password',
+              child: ShadButton.ghost(
+                onPressed: _togglePasswordVisibility,
+                child: Icon(
+                  _obscureText ? LucideIcons.eye : LucideIcons.eyeOff,
+                  color: scheme.mutedForeground,
+                  size: IconSize.row,
+                ),
+              ),
+            ),
+            validator: (value) =>
+                value.isEmpty ? 'Please enter your password' : null,
+          ),
+          Gap.hMd,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(LucideIcons.info, size: 14, color: scheme.mutedForeground),
+              Gap.wSm,
+              Expanded(
+                child: Text(
+                  'Student usernames start with S and parent usernames with P.',
+                  style: text.muted.copyWith(fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+          Gap.hXl,
+          ShadButton(
+            onPressed: _isSubmitting ? null : _login,
+            enabled: !_isSubmitting,
+            width: double.infinity,
+            height: kMinTap + 8,
+            backgroundColor: schoolColor,
+            foregroundColor: onButton,
+            decoration: ShadDecoration(
+              border: ShadBorder(radius: BorderRadius.circular(14)),
+              shadows: [
+                BoxShadow(
+                  color: schoolColor.withValues(alpha: 0.35),
+                  blurRadius: 18,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: _isSubmitting
+                ? SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.3,
+                      color: onButton,
+                    ),
+                  )
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('Sign in'),
+                      Gap.wSm,
+                      Icon(LucideIcons.logIn, size: IconSize.inline, color: onButton),
+                    ],
+                  ),
+          ),
+          if (!compact) ...[
+            Gap.hXxl,
+            Row(
+              children: [
+                Expanded(child: Divider(color: scheme.border)),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: Gap.md),
+                  child: Text('What you can do', style: text.muted),
+                ),
+                Expanded(child: Divider(color: scheme.border)),
+              ],
+            ),
+            Gap.hLg,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _featureTile(LucideIcons.bookOpen, 'Report card', text),
+                _featureTile(LucideIcons.calendarClock, 'Class schedule', text),
+                _featureTile(LucideIcons.receipt, 'Billing', text),
+                _featureTile(LucideIcons.badgeCheck, 'Tap history', text),
+              ],
+            ),
+            Gap.hXl,
+            Center(
+              child: Text(
+                'Powered by Essentiel',
+                style: text.muted.copyWith(fontSize: 12),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
     final scheme = theme.colorScheme;
     final text = theme.textTheme;
-    final dark = Theme.of(context).brightness == Brightness.dark;
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     final schoolName = schoolInfo.isEmpty
         ? 'Your school'
         : schoolInfo.first.schoolname.trim();
 
+    final headerStart = _shade(schoolColor, -0.04);
+    final headerEnd = _shade(schoolColor, -0.20);
+    final headerIsLight = headerStart.computeLuminance() > 0.55;
+    final onHeader = headerIsLight ? const Color(0xFF111827) : Colors.white;
+
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
+      value: headerIsLight
+          ? SystemUiOverlayStyle.dark
+          : SystemUiOverlayStyle.light,
       child: Scaffold(
         backgroundColor: scheme.background,
-        body: SafeArea(
-          child: loading
-              ? const LoadingSkeleton(cards: 2)
-              : SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(
-                    Gap.lg,
-                    Gap.lg,
-                    Gap.lg,
-                    Gap.xxl,
-                  ),
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 460),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                width: 32,
-                                height: 32,
-                                decoration: BoxDecoration(
-                                  color: scheme.primary,
-                                  borderRadius: theme.radius,
-                                ),
-                                child: Icon(
-                                  LucideIcons.graduationCap,
-                                  color: scheme.primaryForeground,
-                                  size: IconSize.row,
-                                ),
-                              ),
-                              Gap.wSm,
-                              Text('Essentiel', style: text.large),
-                              const Spacer(),
-                              ShadButton.ghost(
-                                onPressed: _changeSchool,
-                                size: ShadButtonSize.sm,
-                                child: const Text('Change school'),
-                              ),
-                            ],
-                          ),
-                          if (!keyboardOpen) ...[
-                            Gap.hXxl,
-                            Center(
-                              child: Container(
-                                width: 112,
-                                height: 112,
-                                padding: const EdgeInsets.all(Gap.md),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(28),
-                                  border: Border.all(
-                                    color: schoolColor.withValues(alpha: 0.25),
-                                    width: 1.5,
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: schoolColor.withValues(alpha: 0.15),
-                                      blurRadius: 24,
-                                      offset: const Offset(0, 8),
-                                    ),
-                                  ],
-                                ),
-                                child: _buildSchoolLogo(),
-                              ),
-                            ),
-                            Gap.hLg,
-                            Text(
-                              schoolName.isEmpty ? 'Your school' : schoolName,
-                              textAlign: TextAlign.center,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: text.h4,
-                            ),
-                            Gap.hXs,
-                            Text(
-                              'Student portal',
-                              textAlign: TextAlign.center,
-                              style: text.muted,
-                            ),
-                            Gap.hXl,
-                          ] else
-                            Gap.hLg,
-                          ShadCard(
-                            padding: const EdgeInsets.all(Gap.xl),
-                            child: Form(
-                              key: _formKey,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('Welcome back', style: text.h3),
-                                  Gap.hXs,
-                                  Text(
-                                    'Sign in to access your student account.',
-                                    style: text.muted,
-                                  ),
-                                  Gap.hXl,
-                                  Text('Username', style: text.small),
-                                  Gap.hSm,
-                                  ShadInputFormField(
-                                    controller: _usernameController,
-                                    textInputAction: TextInputAction.next,
-                                    autofillHints: const [
-                                      AutofillHints.username,
-                                    ],
-                                    placeholder: const Text(
-                                      'Enter your username',
-                                    ),
-                                    leading: const Icon(
-                                      LucideIcons.user,
-                                      size: IconSize.row,
-                                    ),
-                                    validator: (value) => value.trim().isEmpty
-                                        ? 'Please enter your username'
-                                        : null,
-                                  ),
-                                  Gap.hLg,
-                                  Text('Password', style: text.small),
-                                  Gap.hSm,
-                                  ShadInputFormField(
-                                    controller: _passwordController,
-                                    obscureText: _obscureText,
-                                    textInputAction: TextInputAction.done,
-                                    autofillHints: const [
-                                      AutofillHints.password,
-                                    ],
-                                    onSubmitted: (_) => _login(),
-                                    placeholder: const Text(
-                                      'Enter your password',
-                                    ),
-                                    leading: const Icon(
-                                      LucideIcons.lock,
-                                      size: IconSize.row,
-                                    ),
-                                    trailing: Tooltip(
-                                      message: _obscureText
-                                          ? 'Show password'
-                                          : 'Hide password',
-                                      child: ShadButton.ghost(
-                                        onPressed: _togglePasswordVisibility,
-                                        child: Icon(
-                                          _obscureText
-                                              ? LucideIcons.eye
-                                              : LucideIcons.eyeOff,
-                                          color: scheme.mutedForeground,
-                                          size: IconSize.row,
-                                        ),
-                                      ),
-                                    ),
-                                    validator: (value) => value.isEmpty
-                                        ? 'Please enter your password'
-                                        : null,
-                                  ),
-                                  Gap.hXl,
-                                  ShadButton(
-                                    onPressed: _isSubmitting ? null : _login,
-                                    enabled: !_isSubmitting,
-                                    width: double.infinity,
-                                    height: kMinTap + 4,
-                                    backgroundColor: schoolColor,
-                                    foregroundColor:
-                                        schoolColor.computeLuminance() > 0.6
-                                        ? Colors.black
-                                        : Colors.white,
-                                    child: _isSubmitting
-                                        ? SizedBox(
-                                            width: 20,
-                                            height: 20,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2.3,
-                                              color: scheme.primaryForeground,
-                                            ),
-                                          )
-                                        : const Text('Sign in'),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+        body: loading
+            ? const SafeArea(child: LoadingSkeleton(cards: 2))
+            : SingleChildScrollView(
+                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                child: TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0, end: 1),
+                  duration: const Duration(milliseconds: 650),
+                  curve: Curves.easeOutCubic,
+                  builder: (context, t, child) => Opacity(
+                    opacity: t,
+                    child: Transform.translate(
+                      offset: Offset(0, (1 - t) * 24),
+                      child: child,
                     ),
                   ),
+                  child: Column(
+                    children: [
+                      _buildHeader(
+                        text: text,
+                        onHeader: onHeader,
+                        headerStart: headerStart,
+                        headerEnd: headerEnd,
+                        schoolName: schoolName,
+                        compact: keyboardOpen,
+                      ),
+                      // The sheet overlaps the bottom of the header so its rounded top
+                      // corners show the gradient behind them.
+                      Transform.translate(
+                        offset: const Offset(0, -28),
+                        child: Container(
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: scheme.background,
+                            borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(32),
+                            ),
+                          ),
+                          child: SafeArea(
+                            top: false,
+                            child: Center(
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(maxWidth: 460),
+                                child: Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    Gap.xl,
+                                    Gap.xl + Gap.xs,
+                                    Gap.xl,
+                                    Gap.xl,
+                                  ),
+                                  child: _buildForm(
+                                    text: text,
+                                    scheme: scheme,
+                                    compact: keyboardOpen,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-        ),
+              ),
       ),
     );
   }
+}
+
+/// Soft overlapping circles on the header, in the spirit of the blob shapes used by
+/// school portals; purely decorative.
+class _HeaderDecorPainter extends CustomPainter {
+  const _HeaderDecorPainter(this.color);
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = color;
+    canvas.drawCircle(Offset(size.width * 0.92, size.height * 0.10), 90, paint);
+    canvas.drawCircle(Offset(size.width * 0.02, size.height * 0.38), 60, paint);
+    canvas.drawCircle(Offset(size.width * 0.80, size.height * 0.88), 46, paint);
+  }
+
+  @override
+  bool shouldRepaint(_HeaderDecorPainter oldDelegate) => oldDelegate.color != color;
 }
