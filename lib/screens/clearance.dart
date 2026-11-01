@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:pushtrial/widgets/service_status_page.dart';
 import 'package:pushtrial/widgets/ui/ui.dart';
 
 class ClearanceScreen extends StatelessWidget {
@@ -6,14 +7,11 @@ class ClearanceScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const AppPage(
+    return const ServiceStatusPage(
       title: 'Clearance',
-      body: EmptyState(
-        icon: LucideIcons.fileCheck,
-        title: 'Not available right now',
-        message:
-            'We are working on making this feature available soon. Please check back later.',
-      ),
+      serviceKey: 'clearance',
+      featureName: 'clearance',
+      icon: LucideIcons.fileCheck,
     );
   }
 }
