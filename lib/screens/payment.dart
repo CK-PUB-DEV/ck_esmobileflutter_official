@@ -30,13 +30,17 @@ class PaymentPageState extends State<PaymentPage> {
   final ShadTabsController<String> _tabs = ShadTabsController(value: _tabTransactions);
 
   User user = UserData.myUser;
-  int syid = 0; // 0 means "All School Years"
-  int semid = 1;
+  int syid = 0; // 0 means "All School Years"; set to the current school year once years load
   int id = 0;
   String sid = '0';
-  String amountpaid = '0.00';
-  String selectedYear = '0'; // Default to "All"
-  String selectedSem = '';
+  String selectedYear = '0';
+
+  /// Semester shown (semester.id); 0 = every semester of the chosen year.
+  int semFilter = 0;
+
+  /// Everything the server returned; [trans] and [payments] are these after the filters.
+  List<Transactions> _allTrans = [];
+  List<Payments> _allPayments = [];
   List<Transactions> trans = [];
   List<Payments> payments = [];
   List<SchoolYear> schoolYear = [];
@@ -123,13 +127,13 @@ class PaymentPageState extends State<PaymentPage> {
 
       schoolYear.sort((a, b) => a.sydesc.compareTo(b.sydesc));
 
+      // Start on the current school year; "All school years" stays one tap away.
+      final current = schoolYear.where((y) => y.isactive == 1).toList();
       setState(() {
-        // Default to "All School Years" (syid = 0)
-        selectedYear = '0';
-        syid = 0;
+        syid = current.isEmpty ? 0 : current.last.id;
+        selectedYear = '$syid';
+        semFilter = 0;
       });
-
-      print('School Year loaded with "All" selected by default');
     } catch (e) {
       print('Error loading school year and semester: $e');
       // Fallback to dummy data if API fails
@@ -147,32 +151,66 @@ class PaymentPageState extends State<PaymentPage> {
       }
       Iterable list = json.decode(response.body);
 
-      List<Transactions> allTransactions = list
-          .map((model) => Transactions.fromJson(model))
-          .toList();
-
-      // Filter transactions by selected school year (syid)
-      // If syid is 0, show all transactions
-      List<Transactions> filteredTransactions = syid == 0
-          ? allTransactions
-          : allTransactions
-              .where((transaction) => transaction.syid == syid)
-              .toList();
-
-      filteredTransactions.sort(
-        (a, b) =>
-            DateTime.parse(b.transdate).compareTo(DateTime.parse(a.transdate)),
-      );
-
+      final all = list.map((model) => Transactions.fromJson(model)).toList();
+      // Newest first; unreadable dates last.
+      all.sort((a, b) {
+        final da = DateTime.tryParse(a.transdate);
+        final db = DateTime.tryParse(b.transdate);
+        if (da == null || db == null) return da == null ? (db == null ? 0 : 1) : -1;
+        return db.compareTo(da);
+      });
       setState(() {
-        trans = filteredTransactions;
-
-        print("User ID: $id");
-        print("Selected syid: $syid");
-        print("Filter: ${syid == 0 ? 'All School Years' : 'School Year ID: $syid'}");
-        print("Total transactions: ${filteredTransactions.length}");
+        _allTrans = all;
+        _applyFilters();
       });
     }
+  }
+
+  /// Recomputes [trans] and [payments] from the full lists for the chosen year and semester.
+  /// Call inside setState.
+  void _applyFilters() {
+    bool keep(int itemSy, int itemSem) =>
+        (syid == 0 || itemSy == syid) && (semFilter == 0 || syid == 0 || itemSem == semFilter);
+    trans = _allTrans.where((t) => keep(t.syid, t.semid)).toList();
+    payments = _allPayments.where((p) => keep(p.syid, p.semid)).toList();
+  }
+
+  /// The semesters the chosen school year has payments in, in order. The semester buttons show
+  /// only when there is more than one (college and senior high); basic ed never sees them.
+  List<int> get _semestersInYear {
+    if (syid == 0) return const [];
+    final ids = <int>{
+      for (final t in _allTrans)
+        if (t.syid == syid && t.semid > 0) t.semid,
+      for (final p in _allPayments)
+        if (p.syid == syid && p.semid > 0) p.semid,
+    }.toList()
+      ..sort();
+    return ids;
+  }
+
+  String _semName(int semid, {bool short = false}) {
+    final name = schoolSem.where((s) => s.id == semid).map((s) => s.semester).firstOrNull ??
+        const {1: '1st Semester', 2: '2nd Semester', 3: 'Summer'}[semid] ??
+        'Semester $semid';
+    return short ? name.replaceAll('Semester', 'Sem') : name;
+  }
+
+  /// "2026-2027 · 1st Semester", "2026-2027" or "All school years".
+  String get _scopeLabel {
+    if (syid == 0) return 'All school years';
+    final year = _yearLabel('$syid');
+    return semFilter == 0 ? year : '$year · ${_semName(semFilter)}';
+  }
+
+  /// True when the student pays per semester (more than one semester in any year): their
+  /// payments under "All school years" are grouped by school year and semester, not by month.
+  bool get _paysPerSemester {
+    final semsByYear = <int, Set<int>>{};
+    for (final t in _allTrans) {
+      semsByYear.putIfAbsent(t.syid, () => {}).add(t.semid);
+    }
+    return semsByYear.values.any((s) => s.length > 1);
   }
 
   getOnlinePayments() async {
@@ -184,32 +222,18 @@ class PaymentPageState extends State<PaymentPage> {
         return;
       }
       Iterable list = json.decode(response.body);
-
-      List<Payments> allPayments = list.map((model) => Payments.fromJson(model)).toList();
-
-      // Filter payments by selected school year (syid)
-      // If syid is 0, show all payments
-      List<Payments> filteredPayments = syid == 0
-          ? allPayments
-          : allPayments
-              .where((payment) => payment.syid == syid)
-              .toList();
-
+      final all = list.map((model) => Payments.fromJson(model)).toList();
       setState(() {
-        payments = filteredPayments;
+        _allPayments = all;
+        _applyFilters();
       });
-
-      print("Selected syid: $syid");
-      print("Filter: ${syid == 0 ? 'All School Years' : 'School Year ID: $syid'}");
-      print("Total payments: ${filteredPayments.length}");
     }
   }
 
   String _yearLabel(String value) {
     if (value == '0') return 'All school years';
-    return schoolYear
-        .firstWhere((y) => y.id.toString() == value, orElse: () => schoolYear.first)
-        .sydesc;
+    return schoolYear.where((y) => y.id.toString() == value).map((y) => y.sydesc).firstOrNull ??
+        'Other school year';
   }
 
   @override
@@ -228,29 +252,52 @@ class PaymentPageState extends State<PaymentPage> {
         },
         children: [
           ShadSelect<String>(
+            // Rebuilt once the years arrive, so it opens on the current school year.
+            key: ValueKey('years-${schoolYear.length}'),
             placeholder: const Text('Select school year'),
             initialValue: selectedYear,
             options: [
-              // "All School Years" option
               const ShadOption(value: '0', child: Text('All school years')),
-              // Individual school years
-              for (final option in schoolYear)
+              for (final option in schoolYear.reversed)
                 ShadOption(value: option.id.toString(), child: Text(option.sydesc)),
             ],
             selectedOptionBuilder: (context, value) => Text(_yearLabel(value)),
             onChanged: (value) {
-              if (value != null) {
-                setState(() {
-                  selectedYear = value;
-                  syid = int.parse(value);
-                });
-                print('Selected School Year: $selectedYear, syid: $syid');
-                // Fetch transactions and online payments for the selected year
-                getTransactions();
-                getOnlinePayments();
-              }
+              if (value == null) return;
+              setState(() {
+                selectedYear = value;
+                syid = int.parse(value);
+                semFilter = 0;
+                _applyFilters();
+              });
             },
           ),
+          if (_semestersInYear.length > 1) ...[
+            Gap.hSm,
+            Row(
+              children: [
+                for (final sem in [0, ..._semestersInYear]) ...[
+                  Expanded(
+                    child: sem == semFilter
+                        ? ShadButton.secondary(
+                            size: ShadButtonSize.sm,
+                            onPressed: () {},
+                            child: Text(sem == 0 ? 'All' : _semName(sem, short: true)),
+                          )
+                        : ShadButton.ghost(
+                            size: ShadButtonSize.sm,
+                            onPressed: () => setState(() {
+                              semFilter = sem;
+                              _applyFilters();
+                            }),
+                            child: Text(sem == 0 ? 'All' : _semName(sem, short: true)),
+                          ),
+                  ),
+                  if (sem != _semestersInYear.last) Gap.wXs,
+                ],
+              ],
+            ),
+          ],
           Gap.hMd,
           ShadTabs<String>(
             controller: _tabs,
@@ -401,54 +448,111 @@ class PaymentPageState extends State<PaymentPage> {
       ];
     }
 
+    double amountOf(Transactions t) => double.tryParse(t.amountpaid.replaceAll(',', '')) ?? 0;
+
+    // Students who pay per semester see "All school years" grouped by school year and semester,
+    // newest first, since that is how their fees are billed. Otherwise group by month (trans is
+    // already sorted newest first); payments without a readable date go last under "Other".
+    final groups = <String, List<Transactions>>{};
+    if (syid == 0 && _paysPerSemester) {
+      final ordered = [...trans]..sort((a, b) {
+          final byYear = _yearLabel('${b.syid}').compareTo(_yearLabel('${a.syid}'));
+          return byYear != 0 ? byYear : b.semid.compareTo(a.semid);
+        });
+      for (final t in ordered) {
+        groups.putIfAbsent('${_yearLabel('${t.syid}')} · ${_semName(t.semid)}', () => []).add(t);
+      }
+    } else {
+      for (final t in trans) {
+        final date = DateTime.tryParse(t.transdate);
+        final key = date == null ? 'Other' : DateFormat('MMMM y').format(date);
+        groups.putIfAbsent(key, () => []).add(t);
+      }
+    }
+    final total = trans.fold<double>(0, (sum, t) => sum + amountOf(t));
+
     return [
-      for (final transaction in trans)
-        AppCard(
+      AppCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(_scopeLabel, style: text.muted),
+            Gap.hXs,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(child: Text(Fmt.money(total), style: text.h3)),
+                Text(
+                  '${trans.length} payment${trans.length == 1 ? '' : 's'}',
+                  style: text.muted,
+                ),
+              ],
+            ),
+            Text('Total paid', style: text.muted),
+          ],
+        ),
+      ),
+      for (final entry in groups.entries) ...[
+        Padding(
+          padding: const EdgeInsets.only(top: Gap.sm, bottom: Gap.sm),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _leading(
-                Icon(
-                  transaction.paytype == 'CASH' ? LucideIcons.banknote : LucideIcons.creditCard,
-                  size: IconSize.row,
-                  color: theme.colorScheme.foreground,
-                ),
-              ),
-              Gap.wMd,
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Builder(
-                      builder: (context) {
-                        final date = DateTime.parse(transaction.transdate);
-                        return Text('${Fmt.date(date)} · ${Fmt.time(date)}', style: text.muted);
-                      },
-                    ),
-                    Gap.hXs,
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            '${transaction.paytype} - OR#: ${transaction.ornum}',
-                            style: text.small.copyWith(fontWeight: FontWeight.w600),
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
-                          ),
-                        ),
-                        Gap.wSm,
-                        Text(
-                          Fmt.money(double.parse(transaction.amountpaid)),
-                          style: text.p.copyWith(fontWeight: FontWeight.w600),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+                child: Text(entry.key, style: text.p.copyWith(fontWeight: FontWeight.w600)),
+              ),
+              Text(
+                Fmt.money(entry.value.fold<double>(0, (sum, t) => sum + amountOf(t))),
+                style: text.muted,
               ),
             ],
           ),
         ),
+        AppCard(
+          padding: EdgeInsets.zero,
+          child: Column(
+            children: [
+              for (var i = 0; i < entry.value.length; i++) ...[
+                if (i > 0) Divider(height: 1, color: theme.colorScheme.border),
+                _transactionRow(entry.value[i], amountOf(entry.value[i])),
+              ],
+            ],
+          ),
+        ),
+      ],
     ];
+  }
+
+  /// "Cash payment" over "OR 68539-M · Oct 19, 2026", amount on the right. Only the date is shown:
+  /// some schools' cashier records keep times on a 12-hour clock without AM/PM, so the time
+  /// would often be wrong.
+  Widget _transactionRow(Transactions t, double amount) {
+    final text = ShadTheme.of(context).textTheme;
+    final type = t.paytype.trim();
+    final title = type.isEmpty
+        ? 'Payment'
+        : '${type[0].toUpperCase()}${type.substring(1).toLowerCase()} payment';
+    final details = [
+      if (t.ornum.trim().isNotEmpty) 'OR ${t.ornum.trim()}',
+      Fmt.date(t.transdate),
+    ].join(' · ');
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: Gap.lg, vertical: Gap.md),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: text.p.copyWith(fontWeight: FontWeight.w600)),
+                Gap.hXs,
+                Text(details, style: text.muted, maxLines: 1, overflow: TextOverflow.ellipsis),
+              ],
+            ),
+          ),
+          Gap.wSm,
+          Text(Fmt.money(amount), style: text.p.copyWith(fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
   }
 }
