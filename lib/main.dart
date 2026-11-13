@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:ui' as ui;
+import 'package:flutter/rendering.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -117,7 +119,7 @@ class MyApp extends StatelessWidget {
   /// foreground text. Bake the muted colour in so every `muted` label really looks muted.
   ///
   /// shadcn's `small` also has a line height of 1, which crowds wrapped lines, so give it 1.4.
-  ShadTextTheme _textTheme(ShadColorScheme scheme) => ShadTextTheme(
+  static ShadTextTheme _textTheme(ShadColorScheme scheme) => ShadTextTheme(
     muted: ShadTextDefaultTheme.muted(
       family: kDefaultFontFamily,
     ).copyWith(color: scheme.mutedForeground),
@@ -126,10 +128,55 @@ class MyApp extends StatelessWidget {
     ).copyWith(height: 1.4),
   );
 
-  ThemeData _materialTheme(BuildContext context) {
-    final base = Theme.of(context);
-    final shad = ShadTheme.of(context).colorScheme;
-    final dark = base.brightness == Brightness.dark;
+  // Built once: rebuilding these on every toggle added to the lag.
+  static final ShadThemeData _lightShadTheme = _buildShadTheme(false);
+  static final ShadThemeData _darkShadTheme = _buildShadTheme(true);
+
+  static ShadThemeData _buildShadTheme(bool dark) {
+    final scheme = dark
+        ? const ShadRedColorScheme.dark()
+        : const ShadRedColorScheme.light();
+    return ShadThemeData(
+      brightness: dark ? Brightness.dark : Brightness.light,
+      colorScheme: scheme,
+      textTheme: _textTheme(scheme),
+      radius: BorderRadius.circular(12),
+      selectTheme: _selectTheme(scheme, dark),
+      inputTheme: _inputTheme(scheme, dark),
+    );
+  }
+
+  /// Material themes are built from fixed data, never from the surrounding (animating) theme, so
+  /// MaterialApp is not rebuilt with a fresh ThemeData on every frame of shadcn's theme lerp.
+  static final ThemeData _lightMaterialTheme = _materialTheme(_lightShadTheme);
+  static final ThemeData _darkMaterialTheme = _materialTheme(_darkShadTheme);
+
+  static ThemeData _materialTheme(ShadThemeData shadTheme) {
+    final shad = shadTheme.colorScheme;
+    final dark = shadTheme.brightness == Brightness.dark;
+    final base = ThemeData(
+      fontFamily: shadTheme.textTheme.family,
+      brightness: shadTheme.brightness,
+      colorScheme: ColorScheme(
+        brightness: shadTheme.brightness,
+        primary: shad.primary,
+        onPrimary: shad.primaryForeground,
+        secondary: shad.secondary,
+        onSecondary: shad.secondaryForeground,
+        error: shad.destructive,
+        onError: shad.destructiveForeground,
+        surface: shad.background,
+        onSurface: shad.foreground,
+      ),
+      scaffoldBackgroundColor: shad.background,
+      dividerTheme: DividerThemeData(color: shad.border, thickness: 1),
+      textSelectionTheme: TextSelectionThemeData(
+        cursorColor: shad.primary,
+        selectionColor: shad.selection,
+        selectionHandleColor: shad.primary,
+      ),
+      iconTheme: IconThemeData(size: 16, color: shad.foreground),
+    );
     final colorScheme = base.colorScheme.copyWith(
       surface: shad.card,
       onSurface: shad.cardForeground,
@@ -253,36 +300,32 @@ class MyApp extends StatelessWidget {
       animation: AppThemeController.instance,
       builder: (context, child) => ShadApp.custom(
         themeMode: AppThemeController.instance.mode,
-        theme: ShadThemeData(
-          brightness: Brightness.light,
-          colorScheme: const ShadRedColorScheme.light(),
-          textTheme: _textTheme(const ShadRedColorScheme.light()),
-          radius: BorderRadius.circular(12),
-          selectTheme: _selectTheme(const ShadRedColorScheme.light(), false),
-          inputTheme: _inputTheme(const ShadRedColorScheme.light(), false),
-        ),
-        darkTheme: ShadThemeData(
-          brightness: Brightness.dark,
-          colorScheme: const ShadRedColorScheme.dark(),
-          textTheme: _textTheme(const ShadRedColorScheme.dark()),
-          radius: BorderRadius.circular(12),
-          selectTheme: _selectTheme(const ShadRedColorScheme.dark(), true),
-          inputTheme: _inputTheme(const ShadRedColorScheme.dark(), true),
-        ),
+        theme: _lightShadTheme,
+        darkTheme: _darkShadTheme,
         appBuilder: (context) => MaterialApp(
           debugShowCheckedModeBanner: false,
           navigatorKey: navigatorKey,
           title: 'Student Portal',
           themeMode: AppThemeController.instance.mode,
-          theme: _materialTheme(context),
-          darkTheme: _materialTheme(context),
+          // The Material theme is derived from the shadcn one, which already animates; lerping a
+          // second full ThemeData every frame is what made the switch stutter.
+          themeAnimationDuration: Duration.zero,
+          theme: _lightMaterialTheme,
+          darkTheme: _darkMaterialTheme,
           localizationsDelegates: const [
             GlobalShadLocalizations.delegate,
             GlobalMaterialLocalizations.delegate,
             GlobalCupertinoLocalizations.delegate,
             GlobalWidgetsLocalizations.delegate,
           ],
-          builder: (context, child) => ShadAppBuilder(child: child!),
+          // A plain (non-animated) ShadTheme here shadows the one ShadApp lerps over 200ms, so the
+          // screens below see the new theme at once and rebuild a single time.
+          builder: (context, child) => ShadTheme(
+            data: AppThemeController.instance.isDark
+                ? _darkShadTheme
+                : _lightShadTheme,
+            child: _ThemeSwitchFade(child: ShadAppBuilder(child: child!)),
+          ),
           initialRoute: '/loading',
           routes: {
             '/loading': (context) => LoadingScreen(),
@@ -343,3 +386,146 @@ ShadInputTheme _inputTheme(ShadColorScheme scheme, bool dark) => ShadInputTheme(
   decoration: _fieldDecoration(scheme, dark),
   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
 );
+
+/// Circular reveal for the light/dark switch. Just before the theme flips, the current screen is
+/// captured as one image and laid over the app; the new theme underneath is then uncovered by a
+/// growing circle that starts at the toggle. Animating a single cached image is cheap, so the
+/// motion stays smooth instead of re-lerping every widget's colours.
+class _ThemeSwitchFade extends StatefulWidget {
+  const _ThemeSwitchFade({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_ThemeSwitchFade> createState() => _ThemeSwitchFadeState();
+}
+
+class _ThemeSwitchFadeState extends State<_ThemeSwitchFade>
+    with SingleTickerProviderStateMixin {
+  final GlobalKey _boundaryKey = GlobalKey();
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 550),
+  )..addStatusListener(_onStatus);
+  ui.Image? _snapshot;
+  Offset _origin = Offset.zero;
+  bool _wasDark = AppThemeController.instance.isDark;
+
+  @override
+  void initState() {
+    super.initState();
+    AppThemeController.instance.beforeChange = _capture;
+    AppThemeController.instance.addListener(_onThemeChanged);
+  }
+
+  Future<void> _capture() async {
+    try {
+      final boundary = _boundaryKey.currentContext?.findRenderObject()
+          as RenderRepaintBoundary?;
+      if (boundary == null || !boundary.hasSize) return;
+      final size = boundary.size;
+      final origin = AppThemeController.instance.revealOrigin;
+      _origin = origin ?? Offset(size.width - 40, 60);
+      // 1x is plenty for a 0.5s animation and keeps the capture and GPU upload cheap.
+      final image = await boundary.toImage(pixelRatio: 1.0);
+      _snapshot?.dispose();
+      _snapshot = image;
+    } catch (_) {
+      _snapshot = null;
+    }
+  }
+
+  void _onThemeChanged() {
+    final dark = AppThemeController.instance.isDark;
+    if (dark == _wasDark) return;
+    _wasDark = dark;
+    if (_snapshot == null) return;
+    _controller.forward(from: 0);
+  }
+
+  void _onStatus(AnimationStatus status) {
+    if (status != AnimationStatus.completed) return;
+    _snapshot?.dispose();
+    setState(() => _snapshot = null);
+  }
+
+  @override
+  void dispose() {
+    final controller = AppThemeController.instance;
+    controller.removeListener(_onThemeChanged);
+    if (controller.beforeChange == _capture) controller.beforeChange = null;
+    _controller.dispose();
+    _snapshot?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final snapshot = _snapshot;
+    return Stack(
+      fit: StackFit.passthrough,
+      children: [
+        RepaintBoundary(key: _boundaryKey, child: widget.child),
+        if (snapshot != null)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: RepaintBoundary(
+                child: AnimatedBuilder(
+                  animation: _controller,
+                  builder: (context, _) => CustomPaint(
+                    painter: _RevealPainter(
+                      image: snapshot,
+                      center: _origin,
+                      progress: Curves.easeInOutCubic.transform(_controller.value),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// Paints the old screen with a circular hole that grows from [center], uncovering the new theme.
+class _RevealPainter extends CustomPainter {
+  _RevealPainter({
+    required this.image,
+    required this.center,
+    required this.progress,
+  });
+
+  final ui.Image image;
+  final Offset center;
+  final double progress;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final farthest = [
+      center.distance,
+      (center - Offset(size.width, 0)).distance,
+      (center - Offset(0, size.height)).distance,
+      (center - Offset(size.width, size.height)).distance,
+    ].reduce((a, b) => a > b ? a : b);
+    final rect = Offset.zero & size;
+    // Even-odd fill of (screen rect + circle) leaves a hole without a costly boolean path op.
+    final clip = Path()
+      ..fillType = PathFillType.evenOdd
+      ..addRect(rect)
+      ..addOval(Rect.fromCircle(center: center, radius: farthest * progress));
+    canvas.save();
+    canvas.clipPath(clip);
+    canvas.drawImageRect(
+      image,
+      Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
+      rect,
+      Paint()..filterQuality = FilterQuality.low,
+    );
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_RevealPainter old) =>
+      old.progress != progress || old.image != image || old.center != center;
+}
