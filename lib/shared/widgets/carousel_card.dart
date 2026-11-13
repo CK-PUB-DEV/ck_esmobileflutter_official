@@ -2,7 +2,7 @@ import 'package:pushtrial/core/api/api_version.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:pushtrial/core/api/api.dart';
-import 'package:pushtrial/models/enrolled_stud.dart';
+import 'package:pushtrial/models/enrolled_student.dart';
 import 'package:pushtrial/models/ledger.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:pushtrial/models/user.dart';

@@ -4,7 +4,7 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pushtrial/models/user.dart';
 import 'package:pushtrial/models/user_data.dart';
-import 'package:pushtrial/models/taphistory.dart';
+import 'package:pushtrial/models/tap_history.dart';
 import 'package:pushtrial/core/api/api.dart';
 import 'package:pushtrial/shared/utils/school_utils.dart';
 import 'package:pushtrial/shared/widgets/ui/ui.dart';

@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:pushtrial/core/api/api.dart';
-import 'package:pushtrial/models/enrolled_stud.dart';
+import 'package:pushtrial/models/enrolled_student.dart';
 import 'package:pushtrial/models/schedule_v2.dart';
 import 'package:pushtrial/models/school_info.dart';
 import 'package:pushtrial/models/user.dart';

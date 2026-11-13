@@ -12,7 +12,7 @@ import 'package:pushtrial/models/user.dart';
 import 'package:pushtrial/models/login.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:pushtrial/models/school_info.dart';
-import 'package:pushtrial/models/enrolled_stud.dart';
+import 'package:pushtrial/models/enrolled_student.dart';
 import 'package:pushtrial/core/services/school_alerts.dart';
 import 'package:pushtrial/core/config/theme_controller.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';

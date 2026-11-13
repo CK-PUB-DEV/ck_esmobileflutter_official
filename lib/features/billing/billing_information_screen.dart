@@ -7,7 +7,7 @@ import 'package:pushtrial/core/api/api.dart';
 import 'package:pushtrial/models/ledger.dart';
 import 'dart:convert';
 import 'package:pushtrial/models/school_info.dart';
-import 'package:pushtrial/models/enrolled_stud.dart';
+import 'package:pushtrial/models/enrolled_student.dart';
 
 class BillingInformationPage extends StatefulWidget {
   const BillingInformationPage({super.key});

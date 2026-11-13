@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:pushtrial/models/enrolled_stud.dart';
+import 'package:pushtrial/models/enrolled_student.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pushtrial/core/api/api.dart';

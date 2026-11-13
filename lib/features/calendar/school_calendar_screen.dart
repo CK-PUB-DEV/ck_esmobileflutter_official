@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:syncfusion_flutter_calendar/calendar.dart';
 import 'package:pushtrial/core/api/api.dart';
 import 'package:pushtrial/models/event.dart';
-import 'package:pushtrial/models/enrolled_stud.dart';
+import 'package:pushtrial/models/enrolled_student.dart';
 import 'package:pushtrial/shared/utils/school_utils.dart';
 import 'package:pushtrial/shared/widgets/ui/ui.dart';
 
