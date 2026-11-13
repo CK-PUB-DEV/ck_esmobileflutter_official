@@ -3,12 +3,12 @@ import 'dart:convert';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:pushtrial/auth/login.dart';
-import 'package:pushtrial/config/app_config.dart';
-import 'package:pushtrial/config/theme_controller.dart';
-import 'package:pushtrial/schools/api/school_api.dart';
-import 'package:pushtrial/schools/models/schools.dart';
-import 'package:pushtrial/widgets/ui/ui.dart';
+import 'package:pushtrial/features/auth/login_screen.dart';
+import 'package:pushtrial/core/config/app_config.dart';
+import 'package:pushtrial/core/config/theme_controller.dart';
+import 'package:pushtrial/features/schools/api/school_api.dart';
+import 'package:pushtrial/features/schools/models/schools.dart';
+import 'package:pushtrial/shared/widgets/ui/ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
