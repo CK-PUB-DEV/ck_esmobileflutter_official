@@ -1,19 +1,19 @@
-import 'package:pushtrial/api/auth_token.dart';
+import 'package:pushtrial/core/api/auth_token.dart';
 import 'dart:convert';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:pushtrial/push_notifications.dart';
-import 'package:pushtrial/services/firebase_push.dart';
+import 'package:pushtrial/core/services/push_notifications.dart';
+import 'package:pushtrial/core/services/firebase_push.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:pushtrial/api/api.dart';
-import '../models/user.dart';
-import '../models/login.dart';
+import 'package:pushtrial/core/api/api.dart';
+import 'package:pushtrial/models/user.dart';
+import 'package:pushtrial/models/login.dart';
 import 'package:pushtrial/models/school_info.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
-import '../schools/screens/schools.dart';
-import '../widgets/ui/ui.dart';
+import 'package:pushtrial/features/schools/school_screen.dart';
+import 'package:pushtrial/shared/widgets/ui/ui.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
