@@ -1,4 +1,4 @@
-import 'package:pushtrial/services/school_alerts.dart';
+import 'package:pushtrial/core/services/school_alerts.dart';
 
 /// One message for the Notifications page: an SMS, tap SMS or text blast the school sent to this
 /// person's phone number (from `api_get_messages`).

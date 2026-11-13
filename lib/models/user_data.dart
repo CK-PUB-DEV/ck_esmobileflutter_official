@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'user.dart';
+import 'package:pushtrial/models/user.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class UserData {
