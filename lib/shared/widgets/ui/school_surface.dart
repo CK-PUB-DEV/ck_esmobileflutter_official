@@ -28,12 +28,13 @@ class SchoolTone {
 
   /// The school colour as a full fill (hero cards, pills, tiles). Colour is used as a background
   /// only: icons and text on neutral surfaces stay neutral.
-  Color get solid => color;
+  Color get solid =>
+      _isDark ? Color.lerp(color, Colors.black, 0.28)! : color;
 
   /// Text and icon colour on [solid]: white, or near-black when the school colour is so light that
   /// white would not be readable (e.g. yellow).
   Color get onSolid =>
-      color.computeLuminance() > 0.55 ? const Color(0xFF111111) : Colors.white;
+      solid.computeLuminance() > 0.55 ? const Color(0xFF111111) : Colors.white;
 }
 
 /// Fully rounded, borderless surface lifted by a soft shadow (a border in dark mode).

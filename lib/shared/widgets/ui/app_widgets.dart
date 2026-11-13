@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'package:pushtrial/shared/widgets/ui/app_spacing.dart';
+import 'package:pushtrial/shared/widgets/ui/school_surface.dart';
 
 /// Section title with an optional trailing action, 24px above and 12px below.
 class SectionHeader extends StatelessWidget {
@@ -28,7 +29,8 @@ class SectionHeader extends StatelessWidget {
   }
 }
 
-/// Bordered card with the standard 16px padding. Use instead of `Card`/shadowed containers.
+/// Rounded card with the standard 16px padding (the shared [RoundedCard] look). Use instead of
+/// `Card`/shadowed containers.
 class AppCard extends StatelessWidget {
   const AppCard({
     super.key,
@@ -50,20 +52,23 @@ class AppCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = ShadTheme.of(context).textTheme;
-    final card = ShadCard(
-      width: double.infinity,
+    return RoundedCard(
+      radius: 24,
       padding: padding,
-      title: title == null ? null : Text(title!, style: text.large),
-      description: description == null ? null : Text(description!, style: text.muted),
-      child: title == null && description == null
-          ? child
-          : Padding(padding: const EdgeInsets.only(top: Gap.md), child: child),
-    );
-    return Padding(
-      padding: margin,
-      child: onTap == null
-          ? card
-          : GestureDetector(behavior: HitTestBehavior.opaque, onTap: onTap, child: card),
+      margin: margin,
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (title != null) Text(title!, style: text.large),
+          if (description != null) ...[
+            Gap.hXs,
+            Text(description!, style: text.muted),
+          ],
+          if (title != null || description != null) Gap.hMd,
+          child,
+        ],
+      ),
     );
   }
 }
