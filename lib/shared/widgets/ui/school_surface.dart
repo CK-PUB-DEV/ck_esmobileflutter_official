@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
+import 'package:pushtrial/shared/utils/school_utils.dart';
 import 'package:pushtrial/shared/widgets/ui/app_spacing.dart';
+import 'package:pushtrial/shared/widgets/ui/app_tokens.dart';
 
 /// Derives the soft school-colour tones used by the rounded surfaces from one [color].
 ///
@@ -9,6 +11,13 @@ import 'package:pushtrial/shared/widgets/ui/app_spacing.dart';
 /// [RoundedCard] and [SchoolIcon], so every tint on the screen comes from the same place.
 class SchoolTone {
   const SchoolTone(this.context, this.color);
+
+  /// The tone for the logged-in school (SchoolUtils), or the theme colour until it is known.
+  /// Use this on screens that do not load the school themselves.
+  factory SchoolTone.current(BuildContext context) => SchoolTone(
+    context,
+    SchoolUtils.lastColor ?? ShadTheme.of(context).colorScheme.primary,
+  );
 
   final BuildContext context;
   final Color color;
@@ -45,7 +54,7 @@ class RoundedCard extends StatelessWidget {
     this.color,
     this.padding = const EdgeInsets.all(Gap.xl),
     this.margin = const EdgeInsets.only(bottom: Gap.md),
-    this.radius = 28,
+    this.radius = AppRadius.card,
     this.onTap,
   });
 
@@ -68,24 +77,13 @@ class RoundedCard extends StatelessWidget {
           color: color ?? scheme.card,
           borderRadius: shape,
           border: isDark ? Border.all(color: scheme.border) : null,
-          boxShadow: isDark
-              ? null
-              : [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.06),
-                    blurRadius: 24,
-                    offset: const Offset(0, 8),
-                  ),
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.04),
-                    blurRadius: 4,
-                    offset: const Offset(0, 1),
-                  ),
-                ],
+          boxShadow: AppShadow.soft(isDark),
         ),
         child: Material(
           type: MaterialType.transparency,
           borderRadius: shape,
+          // Clips children (e.g. a tinted row at the bottom of an expanded card) to the corners.
+          clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: onTap,
             borderRadius: shape,
@@ -132,7 +130,7 @@ class SolidCard extends StatelessWidget {
     required this.child,
     this.padding = const EdgeInsets.all(Gap.xl),
     this.margin = const EdgeInsets.only(bottom: Gap.md),
-    this.radius = 28,
+    this.radius = AppRadius.card,
     this.onTap,
   });
 
@@ -160,13 +158,7 @@ class SolidCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: tone.solid,
           borderRadius: shape,
-          boxShadow: [
-            BoxShadow(
-              color: tone.solid.withValues(alpha: 0.35),
-              blurRadius: 24,
-              offset: const Offset(0, 10),
-            ),
-          ],
+          boxShadow: AppShadow.solid(tone.solid),
         ),
         child: ClipRRect(
           borderRadius: shape,
@@ -208,7 +200,7 @@ class SchoolPill extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: Gap.md, vertical: Gap.xs + 2),
       decoration: BoxDecoration(
         color: onCard ? tone.onSolid.withValues(alpha: 0.20) : tone.solid,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(AppRadius.pill),
       ),
       child: Text(
         label,
@@ -235,7 +227,7 @@ class AccentBar extends StatelessWidget {
     height: 20,
     decoration: BoxDecoration(
       color: tone.solid,
-      borderRadius: BorderRadius.circular(999),
+      borderRadius: BorderRadius.circular(AppRadius.pill),
     ),
   );
 }

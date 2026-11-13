@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'package:pushtrial/shared/widgets/ui/app_spacing.dart';
+import 'package:pushtrial/shared/widgets/ui/app_tokens.dart';
 import 'package:pushtrial/shared/widgets/ui/school_surface.dart';
 
 /// Section title with an optional trailing action, 24px above and 12px below.
@@ -19,6 +20,8 @@ class SectionHeader extends StatelessWidget {
       padding: EdgeInsets.only(top: topGap ? Gap.xl : 0, bottom: Gap.md),
       child: Row(
         children: [
+          AccentBar(SchoolTone.current(context)),
+          Gap.wSm,
           Expanded(
             child: Text(title, style: text.large, maxLines: 1, overflow: TextOverflow.ellipsis),
           ),
@@ -53,7 +56,7 @@ class AppCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = ShadTheme.of(context).textTheme;
     return RoundedCard(
-      radius: 24,
+      radius: AppRadius.row,
       padding: padding,
       margin: margin,
       onTap: onTap,
@@ -168,32 +171,23 @@ class StatusBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final child = Text(label, maxLines: 1, overflow: TextOverflow.ellipsis);
+    ShadBadge toned(StatusTone tone) => ShadBadge(
+      backgroundColor: tone.background,
+      hoverBackgroundColor: tone.background,
+      foregroundColor: tone.foreground,
+      child: child,
+    );
     switch (status) {
       case AppStatus.danger:
         return ShadBadge.destructive(child: child);
       case AppStatus.neutral:
         return ShadBadge.secondary(child: child);
       case AppStatus.success:
-        return ShadBadge(
-          backgroundColor: dark ? const Color(0xFF14532D) : const Color(0xFFDCFCE7),
-          hoverBackgroundColor: dark ? const Color(0xFF14532D) : const Color(0xFFDCFCE7),
-          foregroundColor: dark ? const Color(0xFFBBF7D0) : const Color(0xFF166534),
-          child: child,
-        );
+        return toned(dark ? StatusTone.success.dark : StatusTone.success.light);
       case AppStatus.warning:
-        return ShadBadge(
-          backgroundColor: dark ? const Color(0xFF713F12) : const Color(0xFFFEF3C7),
-          hoverBackgroundColor: dark ? const Color(0xFF713F12) : const Color(0xFFFEF3C7),
-          foregroundColor: dark ? const Color(0xFFFDE68A) : const Color(0xFF92400E),
-          child: child,
-        );
+        return toned(dark ? StatusTone.warning.dark : StatusTone.warning.light);
       case AppStatus.info:
-        return ShadBadge(
-          backgroundColor: dark ? const Color(0xFF1E3A8A) : const Color(0xFFDBEAFE),
-          hoverBackgroundColor: dark ? const Color(0xFF1E3A8A) : const Color(0xFFDBEAFE),
-          foregroundColor: dark ? const Color(0xFFBFDBFE) : const Color(0xFF1E40AF),
-          child: child,
-        );
+        return toned(dark ? StatusTone.info.dark : StatusTone.info.light);
     }
   }
 }
@@ -214,6 +208,309 @@ class AppIconButton extends StatelessWidget {
       child: ShadIconButton.ghost(
         icon: Icon(icon, size: IconSize.row),
         onPressed: onPressed,
+      ),
+    );
+  }
+}
+
+/// One row in a list: optional leading widget, title, optional subtitle, optional trailing widget.
+/// The tap-history row, as a shared component. At least [kTapTarget] tall.
+class ListRow extends StatelessWidget {
+  const ListRow({
+    super.key,
+    required this.title,
+    this.subtitle,
+    this.leading,
+    this.trailing,
+    this.onTap,
+    this.margin = const EdgeInsets.only(bottom: Gap.sm),
+    this.semanticLabel,
+  });
+
+  final String title;
+  final String? subtitle;
+  final Widget? leading;
+  final Widget? trailing;
+  final VoidCallback? onTap;
+  final EdgeInsetsGeometry margin;
+
+  /// Read by screen readers instead of the visible text, when that text alone is unclear.
+  final String? semanticLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = ShadTheme.of(context).textTheme;
+    final row = RoundedCard(
+      radius: AppRadius.row,
+      margin: margin,
+      padding: const EdgeInsets.symmetric(horizontal: Gap.md, vertical: Gap.md),
+      onTap: onTap,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: kTapTarget - Gap.md * 2),
+        child: Row(
+          children: [
+            if (leading != null) ...[leading!, Gap.wMd],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    style: text.p.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                  if (subtitle != null) ...[
+                    Gap.hXs,
+                    Text(subtitle!, style: text.muted),
+                  ],
+                ],
+              ),
+            ),
+            if (trailing != null) ...[Gap.wMd, trailing!],
+          ],
+        ),
+      ),
+    );
+    if (semanticLabel == null) return row;
+    return Semantics(label: semanticLabel, button: onTap != null, child: ExcludeSemantics(child: row));
+  }
+}
+
+/// Fully rounded button shape for the primary action of a screen (submit, upload, log out).
+ShadDecoration appPillDecoration() => ShadDecoration(
+  border: ShadBorder.all(radius: BorderRadius.circular(AppRadius.pill)),
+);
+
+/// Solid school-colour summary card for a screen's one headline number (balance, total paid...).
+///
+/// [label] sits next to [icon], [pill] (e.g. the school year) at the top right, [value] is the big
+/// number, [captions] are small lines under it and [stats] are secondary figures side by side.
+class HeroCard extends StatelessWidget {
+  const HeroCard({
+    super.key,
+    required this.label,
+    required this.value,
+    this.icon,
+    this.pill,
+    this.captions = const [],
+    this.stats = const [],
+    this.progress,
+    this.margin = const EdgeInsets.only(bottom: Gap.md),
+  });
+
+  final String label;
+  final String value;
+  final IconData? icon;
+  final String? pill;
+  final List<String> captions;
+  final List<({String label, String value})> stats;
+
+  /// 0..1: a rounded progress bar under the figures (e.g. classes evaluated).
+  final double? progress;
+  final EdgeInsetsGeometry margin;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = ShadTheme.of(context).textTheme;
+    final tone = SchoolTone.current(context);
+    final on = tone.onSolid;
+    return SolidCard(
+      tone: tone,
+      margin: margin,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              if (icon != null) ...[
+                Icon(icon, color: on, size: IconSize.row),
+                Gap.wSm,
+              ],
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: text.small.copyWith(
+                    color: on.withValues(alpha: 0.85),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              if (pill != null) ...[
+                Gap.wSm,
+                Flexible(child: SchoolPill(pill!, tone, onCard: true)),
+              ],
+            ],
+          ),
+          Gap.hLg,
+          // Scales down instead of overflowing when the amount is long or the text size is large.
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(value, style: text.h1.copyWith(color: on)),
+          ),
+          for (final caption in captions) ...[
+            Gap.hXs,
+            Text(
+              caption,
+              style: text.small.copyWith(color: on.withValues(alpha: 0.85)),
+            ),
+          ],
+          if (progress != null) ...[
+            Gap.hMd,
+            ClipRRect(
+              borderRadius: BorderRadius.circular(AppRadius.pill),
+              child: LinearProgressIndicator(
+                value: progress!.clamp(0.0, 1.0),
+                minHeight: 8,
+                backgroundColor: on.withValues(alpha: 0.2),
+                valueColor: AlwaysStoppedAnimation<Color>(on),
+              ),
+            ),
+          ],
+          if (stats.isNotEmpty) ...[
+            Gap.hLg,
+            Container(height: 1, color: on.withValues(alpha: 0.2)),
+            Gap.hMd,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var i = 0; i < stats.length; i++) ...[
+                  if (i > 0) Gap.wLg,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          stats[i].label,
+                          style: text.small.copyWith(
+                            color: on.withValues(alpha: 0.75),
+                          ),
+                        ),
+                        Gap.hXs,
+                        Text(
+                          stats[i].value,
+                          style: text.p.copyWith(
+                            color: on,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// The app's toggle buttons (report card tabs, billing and payment tabs, semester filters): a
+/// fully rounded gray track, the selected option a white pill. It draws
+/// itself, so it does not depend on the shadcn tabs theme. Content below is switched by the
+/// caller from [value].
+class PillToggle<T> extends StatelessWidget {
+  const PillToggle({
+    super.key,
+    required this.options,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final List<({T value, String label})> options;
+  final T value;
+  final ValueChanged<T> onChanged;
+
+  static const double _height = 44;
+  static const double _inset = 4;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = ShadTheme.of(context);
+    final scheme = theme.colorScheme;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final duration = AppMotion.of(context, const Duration(milliseconds: 280));
+    final selected = options.indexWhere((o) => o.value == value);
+
+    // Gray track; a white pill slides under the selected option and the label colours fade.
+    return Container(
+      padding: const EdgeInsets.all(_inset),
+      decoration: BoxDecoration(
+        color: scheme.muted,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final segment = constraints.maxWidth / options.length;
+          return SizedBox(
+            height: _height,
+            child: Stack(
+              children: [
+                if (selected >= 0)
+                  AnimatedPositioned(
+                    duration: duration,
+                    curve: Curves.easeOutCubic,
+                    left: segment * selected,
+                    top: 0,
+                    bottom: 0,
+                    width: segment,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: scheme.card,
+                        borderRadius: BorderRadius.circular(AppRadius.pill),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: dark ? 0.35 : 0.10),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                Row(
+                  children: [
+                    for (final option in options)
+                      Expanded(
+                        child: Semantics(
+                          button: true,
+                          selected: option.value == value,
+                          label: option.label,
+                          excludeSemantics: true,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(AppRadius.pill),
+                            onTap: () => onChanged(option.value),
+                            child: Container(
+                              height: _height,
+                              alignment: Alignment.center,
+                              padding: const EdgeInsets.symmetric(horizontal: Gap.sm),
+                              child: AnimatedDefaultTextStyle(
+                                duration: duration,
+                                curve: Curves.easeOut,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.small.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: option.value == value
+                                      ? scheme.foreground
+                                      : scheme.mutedForeground,
+                                ),
+                                child: Text(option.label),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
