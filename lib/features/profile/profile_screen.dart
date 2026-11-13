@@ -66,7 +66,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             .map((model) => SchoolInfo.fromJson(model))
             .toList()
             .cast<SchoolInfo>();
-
         final parsed = SchoolUtils.parseColor(schoolInfo[0].schoolcolor);
         if (parsed != null) {
           _schoolColor = parsed;
@@ -427,10 +426,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
   }
 
-  /*************  ✨ Windsurf Command ⭐  *************/
   /// Returns the level name of the student's latest enrollment info or 'Not Available'
   /// if there is no enrolled student info.
-  /*******  0719f279-07f4-473e-bf7c-cf4ed0ae6b5b  *******/
   String _getGradeLevel() {
     final latestInfo = getSelectedEnrolledStud();
     return latestInfo?.levelname ?? 'Not Available';

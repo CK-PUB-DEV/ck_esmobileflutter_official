@@ -232,10 +232,10 @@ class _HomeScreenState extends State<HomeScreen> {
           shrinkWrap: true,
           itemCount: features.length,
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 4,
-            mainAxisSpacing: Gap.lg,
-            crossAxisSpacing: Gap.sm,
-            childAspectRatio: 0.72,
+            crossAxisCount: 3,
+            mainAxisSpacing: Gap.md,
+            crossAxisSpacing: Gap.md,
+            childAspectRatio: 0.95,
           ),
           itemBuilder: (context, index) {
             final feature = features[index];
@@ -276,7 +276,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: text.small.copyWith(
-                        fontSize: 11,
+                        fontSize: 12,
                         height: 1.25,
                         fontWeight: FontWeight.w700,
                       ),

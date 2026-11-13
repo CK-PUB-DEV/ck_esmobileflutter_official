@@ -13,7 +13,7 @@ class TapHistoryScreen extends StatefulWidget {
   const TapHistoryScreen({super.key});
 
   @override
-  _TapHistoryScreenState createState() => _TapHistoryScreenState();
+  State<TapHistoryScreen> createState() => _TapHistoryScreenState();
 }
 
 class _TapHistoryScreenState extends State<TapHistoryScreen> {
