@@ -258,12 +258,16 @@ class MyApp extends StatelessWidget {
           colorScheme: const ShadRedColorScheme.light(),
           textTheme: _textTheme(const ShadRedColorScheme.light()),
           radius: BorderRadius.circular(12),
+          selectTheme: _selectTheme(const ShadRedColorScheme.light(), false),
+          inputTheme: _inputTheme(const ShadRedColorScheme.light(), false),
         ),
         darkTheme: ShadThemeData(
           brightness: Brightness.dark,
           colorScheme: const ShadRedColorScheme.dark(),
           textTheme: _textTheme(const ShadRedColorScheme.dark()),
           radius: BorderRadius.circular(12),
+          selectTheme: _selectTheme(const ShadRedColorScheme.dark(), true),
+          inputTheme: _inputTheme(const ShadRedColorScheme.dark(), true),
         ),
         appBuilder: (context) => MaterialApp(
           debugShowCheckedModeBanner: false,
@@ -298,3 +302,44 @@ class MyApp extends StatelessWidget {
     );
   }
 }
+
+/// Field surface shared by dropdowns and text inputs: a solid card-coloured pill with a visible
+/// border and a soft shadow, so it reads on the tinted page instead of blending into it.
+ShadDecoration _fieldDecoration(ShadColorScheme scheme, bool dark) {
+  final pill = BorderRadius.circular(999);
+  return ShadDecoration(
+    color: scheme.card,
+    border: ShadBorder.all(
+      color: dark ? scheme.border : scheme.foreground.withValues(alpha: 0.18),
+      width: 1,
+      radius: pill,
+    ),
+    focusedBorder: ShadBorder.all(color: scheme.foreground, width: 1.5, radius: pill),
+    secondaryFocusedBorder: ShadBorder.all(
+      color: scheme.ring.withValues(alpha: 0.25),
+      width: 4,
+      radius: pill,
+    ),
+    shadows: dark
+        ? null
+        : [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+  );
+}
+
+/// Every ShadSelect picks this up; do not restyle dropdowns per screen.
+ShadSelectTheme _selectTheme(ShadColorScheme scheme, bool dark) => ShadSelectTheme(
+  decoration: _fieldDecoration(scheme, dark),
+  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+);
+
+/// Every ShadInput / ShadInputFormField picks this up.
+ShadInputTheme _inputTheme(ShadColorScheme scheme, bool dark) => ShadInputTheme(
+  decoration: _fieldDecoration(scheme, dark),
+  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+);

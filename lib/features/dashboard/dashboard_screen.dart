@@ -148,7 +148,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         extendBody: true,
         body: NotificationListener<ScrollNotification>(
           onNotification: _onScroll,
+          // top: false - each tab's header draws its own colour behind the status bar / island.
           child: SafeArea(
+            top: false,
             bottom: false,
             child: IndexedStack(index: _selectedIndex, children: _pages),
           ),

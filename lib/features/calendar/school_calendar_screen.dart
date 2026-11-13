@@ -200,6 +200,69 @@ class _SchoolCalendarState extends State<SchoolCalendar> {
     );
   }
 
+  /// Filled hero like the other tabs: the next event, or a calm "nothing scheduled" line.
+  Widget _heroCard(SchoolTone tone, List<Event> all) {
+    final text = ShadTheme.of(context).textTheme;
+    final onSolid = tone.onSolid;
+    final now = DateTime.now();
+    final upcoming = all
+        .where((e) => e.startTime.year > 1 && !e.endTime.isBefore(now))
+        .toList()
+      ..sort((a, b) => a.startTime.compareTo(b.startTime));
+    final next = upcoming.isEmpty ? null : upcoming.first;
+    final count = all.length;
+    return SolidCard(
+      tone: tone,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(LucideIcons.calendarDays, color: onSolid, size: IconSize.row),
+              Gap.wSm,
+              Expanded(
+                child: Text(
+                  next == null ? 'School calendar' : 'Next event',
+                  style: text.small.copyWith(
+                    color: onSolid.withValues(alpha: 0.85),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              if (selectedYear.isNotEmpty)
+                SchoolPill('SY $selectedYear', tone, onCard: true),
+            ],
+          ),
+          Gap.hLg,
+          Text(
+            next?.title ?? 'Nothing scheduled',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: text.h2.copyWith(color: onSolid),
+          ),
+          Gap.hXs,
+          Text(
+            next == null
+                ? 'No upcoming events this school year.'
+                : [
+                    Fmt.date(next.startTime),
+                    if (next.time.isNotEmpty) next.time,
+                  ].join(' · '),
+            style: text.p.copyWith(color: onSolid.withValues(alpha: 0.85)),
+          ),
+          Gap.hMd,
+          Text(
+            count == 1 ? '1 event this school year' : '$count events this school year',
+            style: text.small.copyWith(
+              color: onSolid.withValues(alpha: 0.75),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _eventCard(Event event, SchoolTone tone) {
     final text = ShadTheme.of(context).textTheme;
     final scheme = ShadTheme.of(context).colorScheme;
@@ -281,6 +344,8 @@ class _SchoolCalendarState extends State<SchoolCalendar> {
       title: 'School calendar',
       backgroundColor: tone.background,
       children: [
+        _heroCard(tone, events),
+        Gap.hSm,
         ShadSelect<String>(
           initialValue: selectedYear.isNotEmpty ? selectedYear : null,
           placeholder: const Text('Choose a school year'),
