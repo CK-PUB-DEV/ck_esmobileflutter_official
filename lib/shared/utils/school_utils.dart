@@ -41,6 +41,18 @@ class SchoolUtils {
     await prefs.setString(_colorKey(domain), '#${color.toARGB32().toRadixString(16).padLeft(8, '0')}');
   }
 
+  /// Loads the remembered colour of the chosen school from disk, with no network call, so the very
+  /// first frame of the next screen already has it. Without this every screen paints in the theme
+  /// colour (red) until the school's info arrives, and then jumps to the school colour.
+  static Future<void> warmFromDisk() async {
+    final prefs = await SharedPreferences.getInstance();
+    final domain = prefs.getString('selectedSchool');
+    if (domain == null || domain.isEmpty) return;
+    if (_colorDomain == domain && lastColor != null) return;
+    lastColor = parseColor(prefs.getString(_colorKey(domain)));
+    _colorDomain = domain;
+  }
+
   /// The logged-in school's colour, or null when unknown (use the theme colour then).
   /// Served from memory or disk for the current school; fetched once when neither has it.
   static Future<Color?> schoolColor({bool refresh = false}) async {
