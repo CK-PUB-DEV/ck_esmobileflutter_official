@@ -231,11 +231,12 @@ class _HomeScreenState extends State<HomeScreen> {
           physics: const NeverScrollableScrollPhysics(),
           shrinkWrap: true,
           itemCount: features.length,
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          // A fixed tile height that grows with the text size, so two-line labels never overflow.
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 3,
             mainAxisSpacing: Gap.md,
             crossAxisSpacing: Gap.md,
-            childAspectRatio: 0.95,
+            mainAxisExtent: 112 + (MediaQuery.textScalerOf(context).scale(1) - 1).clamp(0.0, 1.5) * 64,
           ),
           itemBuilder: (context, index) {
             final feature = features[index];
@@ -351,8 +352,8 @@ class _NotificationBell extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
         child: SizedBox(
-          width: kMinTap,
-          height: kMinTap,
+          width: kTapTarget,
+          height: kTapTarget,
           child: Stack(
             clipBehavior: Clip.none,
             alignment: Alignment.center,

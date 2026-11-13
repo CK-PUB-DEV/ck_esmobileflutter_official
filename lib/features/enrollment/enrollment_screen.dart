@@ -118,46 +118,35 @@ class EnrollmentScreenState extends State<EnrollmentScreen> {
   }
 
   Widget _enrollmentCard(EnrolledStud enrollment) {
-    final theme = ShadTheme.of(context);
     final status = enrollment.description;
-    final enrolled =
-        status.toLowerCase().contains('enrolled') &&
-        !status.toLowerCase().contains('not');
-    return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    // The school year and grade level are the headline; the rest are details on a card below.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        HeroCard(
+          label: 'School year ${enrollment.sydesc}',
+          icon: LucideIcons.school,
+          value: enrollment.levelname.isEmpty ? 'Enrolled' : enrollment.levelname,
+          pill: status.isEmpty ? null : status,
+          margin: const EdgeInsets.only(bottom: Gap.sm),
+        ),
+        AppCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Text(
-                  enrollment.sydesc,
-                  style: theme.textTheme.large,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (status.isNotEmpty) ...[
-                Gap.wSm,
-                StatusBadge(
-                  status,
-                  status: enrolled ? AppStatus.success : AppStatus.neutral,
-                ),
-              ],
+              if (enrollment.semester.isNotEmpty)
+                InfoRow('Semester', enrollment.semester, icon: LucideIcons.calendar),
+              InfoRow('Grade level', enrollment.levelname, icon: LucideIcons.graduationCap),
+              if (enrollment.strandname.isNotEmpty)
+                InfoRow('Strand', enrollment.strandname, icon: LucideIcons.bookOpen),
+              if (enrollment.sectionname.isNotEmpty)
+                InfoRow('Section', enrollment.sectionname, icon: LucideIcons.users),
+              if (enrollment.courseDesc.isNotEmpty)
+                InfoRow('Course', enrollment.courseDesc, icon: LucideIcons.bookOpen),
             ],
           ),
-          Gap.hSm,
-          if (enrollment.semester.isNotEmpty)
-            InfoRow('Semester', enrollment.semester, icon: LucideIcons.calendar),
-          InfoRow('Grade level', enrollment.levelname, icon: LucideIcons.graduationCap),
-          if (enrollment.strandname.isNotEmpty)
-            InfoRow('Strand', enrollment.strandname, icon: LucideIcons.bookOpen),
-          if (enrollment.sectionname.isNotEmpty)
-            InfoRow('Section', enrollment.sectionname, icon: LucideIcons.users),
-          if (enrollment.courseDesc.isNotEmpty)
-            InfoRow('Course', enrollment.courseDesc, icon: LucideIcons.bookOpen),
-        ],
-      ),
+        ),
+      ],
     );
   }
 

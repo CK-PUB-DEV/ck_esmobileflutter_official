@@ -43,6 +43,8 @@ class _ClassScheduleV2ScreenState extends State<ClassScheduleV2Screen> {
   String selectedSem = '';
 
   bool loading = true;
+  // Set when the schedule could not be loaded, so the page offers Retry instead of looking empty.
+  bool _failed = false;
 
   Color hexToColor(String hexString) {
     final buffer = StringBuffer();
@@ -126,9 +128,13 @@ class _ClassScheduleV2ScreenState extends State<ClassScheduleV2Screen> {
 
   Future<void> _loadSchedule() async {
     if (syid == 0) return;
-    setState(() => loading = true);
+    setState(() {
+      loading = true;
+      _failed = false;
+    });
     try {
       final response = await CallApi().getV2ClassSchedule(studid, syid, semid);
+      if (response.statusCode != 200) _failed = true;
       if (response.statusCode == 200) {
         final decoded = json.decode(response.body);
         if (decoded is List && mounted) {
@@ -139,6 +145,7 @@ class _ClassScheduleV2ScreenState extends State<ClassScheduleV2Screen> {
       }
     } catch (e) {
       print('V2 schedule error: $e');
+      _failed = true;
     }
     if (mounted) setState(() => loading = false);
   }
@@ -169,14 +176,17 @@ class _ClassScheduleV2ScreenState extends State<ClassScheduleV2Screen> {
     _loadSchedule();
   }
 
-  /// School colour for small icon accents; falls back to the theme primary until it loads
-  /// (and lightens in dark mode so it stays readable).
-  Color _accent(BuildContext context) {
-    final theme = ShadTheme.of(context);
-    if (schoolColor.a == 0) return theme.colorScheme.primary;
-    return Theme.of(context).brightness == Brightness.dark
-        ? Color.lerp(schoolColor, Colors.white, 0.4)!
-        : schoolColor;
+  /// Small icons stay neutral: the school colour is used on backgrounds only.
+  Color _accent(BuildContext context) => ShadTheme.of(context).colorScheme.mutedForeground;
+
+  /// "SY 2025-2026 · 1st Semester" for the hero card.
+  String? _heroPill(bool showSem) {
+    final year = schoolYear.where((y) => y.id.toString() == selectedYear).map((y) => y.sydesc).firstOrNull;
+    if (year == null) return null;
+    final sem = showSem
+        ? schoolSem.where((x) => x.id.toString() == selectedSem).map((x) => x.semester).firstOrNull
+        : null;
+    return sem == null ? 'SY $year' : 'SY $year · $sem';
   }
 
   @override
@@ -190,6 +200,13 @@ class _ClassScheduleV2ScreenState extends State<ClassScheduleV2Screen> {
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(Gap.lg, Gap.sm, Gap.lg, Gap.xl),
               children: [
+                if (subjects.isNotEmpty)
+                  HeroCard(
+                    label: 'Class schedule',
+                    icon: LucideIcons.calendarClock,
+                    value: '${subjects.length} subject${subjects.length == 1 ? '' : 's'}',
+                    pill: _heroPill(showSem),
+                  ),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -215,7 +232,15 @@ class _ClassScheduleV2ScreenState extends State<ClassScheduleV2Screen> {
                   ],
                 ),
                 Gap.hXl,
-                if (subjects.isEmpty)
+                if (subjects.isEmpty && _failed)
+                  Padding(
+                    padding: const EdgeInsets.only(top: Gap.xxl),
+                    child: ErrorState(
+                      title: 'Could not load your schedule',
+                      onRetry: _loadSchedule,
+                    ),
+                  )
+                else if (subjects.isEmpty)
                   const Padding(
                     padding: EdgeInsets.only(top: Gap.xxl),
                     child: EmptyState(
@@ -248,7 +273,7 @@ class _ClassScheduleV2ScreenState extends State<ClassScheduleV2Screen> {
               ),
               if (subj.subjcode.isNotEmpty) ...[
                 Gap.wSm,
-                ShadBadge.secondary(child: Text(subj.subjcode)),
+                SchoolPill(subj.subjcode, SchoolTone.current(context)),
               ],
             ],
           ),
