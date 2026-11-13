@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
-import 'app_spacing.dart';
+import 'package:pushtrial/shared/widgets/ui/app_spacing.dart';
 
 /// Standard page for every feature screen: app bar, safe area, 16px side padding and an
 /// optional pull-to-refresh. Pass [children] for a scrolling page, or [body] for anything

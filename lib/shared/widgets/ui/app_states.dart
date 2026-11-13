@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
-import 'app_spacing.dart';
+import 'package:pushtrial/shared/widgets/ui/app_spacing.dart';
 
 /// Centered message for "nothing here yet".
 class EmptyState extends StatelessWidget {

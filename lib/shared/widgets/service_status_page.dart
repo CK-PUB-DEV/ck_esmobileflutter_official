@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:pushtrial/services/student_services.dart';
-import 'package:pushtrial/widgets/ui/ui.dart';
+import 'package:pushtrial/core/services/student_services.dart';
+import 'package:pushtrial/shared/widgets/ui/ui.dart';
 
 /// Page for a student service the app can't show yet. Says which case it is, as the school's
 /// server reports it: the school doesn't use it, or it uses it on the portal and it is coming

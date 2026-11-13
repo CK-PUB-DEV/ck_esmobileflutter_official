@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pushtrial/models/school_info.dart';
-import 'package:pushtrial/api/api.dart';
+import 'package:pushtrial/core/api/api.dart';
 
 class SchoolUtils {
   static Color hexToColor(String hexString) {
