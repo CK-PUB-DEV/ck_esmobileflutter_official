@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
-import '../models/user.dart';
-import '../schools/api/school_api.dart';
-import '../widgets/ui/ui.dart';
+import 'package:pushtrial/models/user.dart';
+import 'package:pushtrial/features/schools/api/school_api.dart';
+import 'package:pushtrial/shared/widgets/ui/ui.dart';
 import 'dart:convert';
 
 class LoadingScreen extends StatefulWidget {
