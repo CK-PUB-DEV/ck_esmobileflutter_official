@@ -343,6 +343,30 @@ class _PaymentFormState extends State<PaymentForm> {
     );
   }
 
+  // A group of related fields on one rounded card, titled like the profile sections.
+  Widget _section(String title, IconData icon, List<Widget> children) {
+    final text = ShadTheme.of(context).textTheme;
+    final scheme = ShadTheme.of(context).colorScheme;
+    return RoundedCard(
+      radius: AppRadius.row,
+      padding: const EdgeInsets.fromLTRB(Gap.lg, Gap.lg, Gap.lg, Gap.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: IconSize.row, color: scheme.foreground),
+              Gap.wSm,
+              Expanded(child: Text(title, style: text.large)),
+            ],
+          ),
+          Gap.hLg,
+          ...children,
+        ],
+      ),
+    );
+  }
+
   Widget _icon(IconData icon) {
     final color = ShadTheme.of(context).colorScheme.mutedForeground;
     return Icon(icon, size: IconSize.row, color: color);
@@ -359,6 +383,7 @@ class _PaymentFormState extends State<PaymentForm> {
     return AppPage(
       title: 'Online payment form',
       children: [
+        _section('Payment details', LucideIcons.creditCard, [
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -452,6 +477,8 @@ class _PaymentFormState extends State<PaymentForm> {
               },
             ),
           ),
+        ]),
+        _section('Transaction', LucideIcons.receipt, [
         _field(
           'Bank transaction date',
           ShadInput(
@@ -477,6 +504,8 @@ class _PaymentFormState extends State<PaymentForm> {
             keyboardType: TextInputType.number,
           ),
         ),
+        ]),
+        _section('Notify the school', LucideIcons.messageSquare, [
         _field(
           'Message receiver',
           ShadSelect<String>(
@@ -513,6 +542,8 @@ class _PaymentFormState extends State<PaymentForm> {
             keyboardType: TextInputType.phone,
           ),
         ),
+        ]),
+        _section('Receipt', LucideIcons.imagePlus, [
         _field(
           'Receipt',
           ShadButton.outline(
@@ -529,7 +560,7 @@ class _PaymentFormState extends State<PaymentForm> {
           Padding(
             padding: const EdgeInsets.only(bottom: Gap.lg),
             child: ClipRRect(
-              borderRadius: theme.radius,
+              borderRadius: BorderRadius.circular(AppRadius.row),
               child: Image.memory(
                 _receiptImageBytes!,
                 height: 200,
@@ -538,9 +569,12 @@ class _PaymentFormState extends State<PaymentForm> {
               ),
             ),
           ),
+        ]),
         Gap.hSm,
         ShadButton(
           width: double.infinity,
+          height: kTapTarget + 4,
+          decoration: appPillDecoration(),
           onPressed: _submitForm,
           leading: const Icon(LucideIcons.upload, size: IconSize.row),
           child: const Text('Submit payment'),

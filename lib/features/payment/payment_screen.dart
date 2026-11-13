@@ -44,6 +44,10 @@ class PaymentPageState extends State<PaymentPage> {
   List<Transactions> trans = [];
   List<Payments> payments = [];
   List<SchoolYear> schoolYear = [];
+
+  // Loading and error state of the transactions list, so it never looks empty while it loads.
+  bool _txLoaded = false;
+  bool _txFailed = false;
   List<Sem> schoolSem = [];
 
   List<SchoolInfo> schoolInfo = [];
@@ -142,7 +146,20 @@ class PaymentPageState extends State<PaymentPage> {
   }
 
   getTransactions() async {
+    setState(() => _txFailed = false);
+    try {
+      await _fetchTransactions();
+    } catch (e) {
+      print('Error loading transactions: $e');
+      setState(() => _txFailed = true);
+    } finally {
+      setState(() => _txLoaded = true);
+    }
+  }
+
+  Future<void> _fetchTransactions() async {
     final response = await CallApi().getTransactions(id);
+    if (response.statusCode != 200) _txFailed = true;
 
     if (response.statusCode == 200) {
       if (response.body.isEmpty) {
@@ -274,37 +291,26 @@ class PaymentPageState extends State<PaymentPage> {
           ),
           if (_semestersInYear.length > 1) ...[
             Gap.hSm,
-            Row(
-              children: [
-                for (final sem in [0, ..._semestersInYear]) ...[
-                  Expanded(
-                    child: sem == semFilter
-                        ? ShadButton.secondary(
-                            size: ShadButtonSize.sm,
-                            onPressed: () {},
-                            child: Text(sem == 0 ? 'All' : _semName(sem, short: true)),
-                          )
-                        : ShadButton.ghost(
-                            size: ShadButtonSize.sm,
-                            onPressed: () => setState(() {
-                              semFilter = sem;
-                              _applyFilters();
-                            }),
-                            child: Text(sem == 0 ? 'All' : _semName(sem, short: true)),
-                          ),
-                  ),
-                  if (sem != _semestersInYear.last) Gap.wXs,
-                ],
+            PillToggle<int>(
+              value: semFilter,
+              options: [
+                for (final sem in [0, ..._semestersInYear])
+                  (value: sem, label: sem == 0 ? 'All' : _semName(sem, short: true)),
               ],
+              onChanged: (sem) => setState(() {
+                semFilter = sem;
+                _applyFilters();
+              }),
             ),
           ],
           Gap.hMd,
-          ShadTabs<String>(
-            controller: _tabs,
-            tabs: const [
-              ShadTab(value: _tabTransactions, child: Text('Transactions')),
-              ShadTab(value: _tabUploaded, child: Text('Uploaded payments')),
+          PillToggle<String>(
+            value: _tabs.selected ?? _tabTransactions,
+            options: const [
+              (value: _tabTransactions, label: 'Transactions'),
+              (value: _tabUploaded, label: 'Uploaded payments'),
             ],
+            onChanged: _tabs.select,
           ),
           Gap.hMd,
           if (_tabs.selected == _tabUploaded) ..._buildUploadedPaymentTab() else ..._buildTransactionsTab(),
@@ -354,6 +360,8 @@ class PaymentPageState extends State<PaymentPage> {
     return [
       ShadButton(
         width: double.infinity,
+        height: kTapTarget + 4,
+        decoration: appPillDecoration(),
         leading: const Icon(LucideIcons.plus, size: IconSize.row),
         onPressed: () {
           Navigator.push(
@@ -438,6 +446,24 @@ class PaymentPageState extends State<PaymentPage> {
     final theme = ShadTheme.of(context);
     final text = theme.textTheme;
 
+    if (!_txLoaded) {
+      return [
+        for (var i = 0; i < 3; i++) ...[
+          const SkeletonBox(height: 96, radius: AppRadius.row),
+          Gap.hMd,
+        ],
+      ];
+    }
+
+    if (trans.isEmpty && _txFailed) {
+      return [
+        ErrorState(
+          title: 'Could not load transactions',
+          onRetry: getTransactions,
+        ),
+      ];
+    }
+
     if (trans.isEmpty) {
       return const [
         EmptyState(
@@ -472,25 +498,12 @@ class PaymentPageState extends State<PaymentPage> {
     final total = trans.fold<double>(0, (sum, t) => sum + amountOf(t));
 
     return [
-      AppCard(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(_scopeLabel, style: text.muted),
-            Gap.hXs,
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(child: Text(Fmt.money(total), style: text.h3)),
-                Text(
-                  '${trans.length} payment${trans.length == 1 ? '' : 's'}',
-                  style: text.muted,
-                ),
-              ],
-            ),
-            Text('Total paid', style: text.muted),
-          ],
-        ),
+      HeroCard(
+        label: _scopeLabel,
+        icon: LucideIcons.banknote,
+        value: Fmt.money(total),
+        pill: '${trans.length} payment${trans.length == 1 ? '' : 's'}',
+        captions: const ['Total paid'],
       ),
       for (final entry in groups.entries) ...[
         Padding(

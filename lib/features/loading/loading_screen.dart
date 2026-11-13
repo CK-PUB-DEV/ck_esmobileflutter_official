@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:pushtrial/models/user.dart';
 import 'package:pushtrial/features/schools/api/school_api.dart';
+import 'package:pushtrial/shared/utils/school_utils.dart';
 import 'package:pushtrial/shared/widgets/ui/ui.dart';
 import 'dart:convert';
 
@@ -15,7 +16,14 @@ class _LoadingScreenState extends State<LoadingScreen> {
   @override
   void initState() {
     super.initState();
+    _warmSchoolColor();
     _checkLoginStatus();
+  }
+
+  /// The splash and the screen after it use the school's own colour from the first frame.
+  Future<void> _warmSchoolColor() async {
+    await SchoolUtils.warmFromDisk();
+    if (mounted) setState(() {});
   }
 
   Future<void> _refreshSchoolVersion(SharedPreferences prefs) async {
@@ -42,6 +50,7 @@ class _LoadingScreenState extends State<LoadingScreen> {
 
   Future<void> _checkLoginStatus() async {
     await Future.delayed(Duration(seconds: 2));
+    await SchoolUtils.warmFromDisk();
 
     final prefs = await SharedPreferences.getInstance();
     final userJson = prefs.getString('user');
@@ -61,6 +70,11 @@ class _LoadingScreenState extends State<LoadingScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
+    // The school's colour once known; the theme colour only for a school never opened before.
+    final accent = SchoolUtils.lastColor ?? theme.colorScheme.primary;
+    final onAccent = accent.computeLuminance() > 0.55
+        ? const Color(0xFF111111)
+        : Colors.white;
     return Scaffold(
       backgroundColor: theme.colorScheme.background,
       body: Center(
@@ -71,13 +85,13 @@ class _LoadingScreenState extends State<LoadingScreen> {
               width: 64,
               height: 64,
               decoration: BoxDecoration(
-                color: theme.colorScheme.primary,
-                borderRadius: theme.radius,
+                color: accent,
+                borderRadius: BorderRadius.circular(AppRadius.card - 8),
               ),
               child: Icon(
                 LucideIcons.graduationCap,
                 size: 32,
-                color: theme.colorScheme.primaryForeground,
+                color: onAccent,
               ),
             ),
             Gap.hLg,
@@ -85,12 +99,15 @@ class _LoadingScreenState extends State<LoadingScreen> {
             Gap.hXs,
             Text('Student portal', style: theme.textTheme.muted),
             Gap.hXl,
-            SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(
-                strokeWidth: 2.5,
-                color: theme.colorScheme.primary,
+            Semantics(
+              label: 'Loading',
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  color: accent,
+                ),
               ),
             ),
           ],

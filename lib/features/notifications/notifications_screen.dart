@@ -93,6 +93,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     final theme = ShadTheme.of(context);
     final text = theme.textTheme;
     final unread = message.isUnread;
+    final tone = SchoolTone.current(context);
     final created = message.createdAt;
     final when = created == null ? '' : '${Fmt.date(created)} · ${Fmt.time(created)}';
 
@@ -104,7 +105,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           Icon(
             unread ? LucideIcons.bellRing : LucideIcons.bell,
             size: IconSize.row,
-            color: unread ? theme.colorScheme.primary : theme.colorScheme.mutedForeground,
+            color: unread ? theme.colorScheme.foreground : theme.colorScheme.mutedForeground,
           ),
           Gap.wMd,
           Expanded(
@@ -147,7 +148,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               height: 8,
               margin: const EdgeInsets.only(top: Gap.xs + 2),
               decoration: BoxDecoration(
-                color: theme.colorScheme.primary,
+                color: tone.solid,
                 shape: BoxShape.circle,
               ),
             ),
@@ -158,6 +159,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   Widget _swipeable(SchoolMessage message) {
     final theme = ShadTheme.of(context);
+    final tone = SchoolTone.current(context);
     return SwipeActionCell(
       key: ValueKey(message.key),
       trailingActions: message.isUnread
@@ -167,8 +169,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   alignment: Alignment.center,
                   margin: const EdgeInsets.only(bottom: Gap.md),
                   decoration: BoxDecoration(
-                    color: theme.colorScheme.primary,
-                    borderRadius: theme.radius,
+                    color: tone.solid,
+                    borderRadius: BorderRadius.circular(AppRadius.row),
                   ),
                   padding: const EdgeInsets.symmetric(horizontal: Gap.md),
                   child: Column(
@@ -177,14 +179,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       Icon(
                         LucideIcons.check,
                         size: IconSize.row,
-                        color: theme.colorScheme.primaryForeground,
+                        color: tone.onSolid,
                       ),
                       Gap.hXs,
                       Text(
                         'Mark as read',
                         textAlign: TextAlign.center,
                         style: theme.textTheme.small.copyWith(
-                          color: theme.colorScheme.primaryForeground,
+                          color: tone.onSolid,
                         ),
                       ),
                     ],
