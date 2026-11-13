@@ -2,14 +2,14 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_swipe_action_cell/flutter_swipe_action_cell.dart';
-import 'package:pushtrial/services/messages_repository.dart';
+import 'package:pushtrial/core/services/messages_repository.dart';
 import 'package:pushtrial/models/login.dart';
 import 'package:pushtrial/models/school_message.dart';
 import 'package:pushtrial/models/user.dart';
 import 'package:pushtrial/models/user_data.dart';
 import 'package:pushtrial/models/user_login.dart';
-import 'package:pushtrial/services/message_read_store.dart';
-import 'package:pushtrial/widgets/ui/ui.dart';
+import 'package:pushtrial/core/services/message_read_store.dart';
+import 'package:pushtrial/shared/widgets/ui/ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// What the school sent this person: SMS, tap texts and text blasts to their phone number, and
