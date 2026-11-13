@@ -13,6 +13,7 @@ import 'package:pushtrial/models/login.dart';
 import 'package:pushtrial/models/school_info.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:pushtrial/features/schools/school_screen.dart';
+import 'package:pushtrial/shared/utils/school_utils.dart';
 import 'package:pushtrial/shared/widgets/ui/ui.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -71,6 +72,8 @@ class _LoginState extends State<LoginScreen> {
       setState(() {
         schoolInfo = info;
         schoolColor = hexToColor(info.first.schoolcolor);
+        final parsed = SchoolUtils.parseColor(info.first.schoolcolor);
+        if (parsed != null) SchoolUtils.remember(parsed);
         picurl = info.first.picurl;
       });
     } catch (_) {

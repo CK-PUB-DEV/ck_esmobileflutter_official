@@ -33,13 +33,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
   ];
   int _selectedIndex = 0;
 
+  /// True while the footer is folded to icons only (the page is scrolling down).
+  bool _navCollapsed = false;
+  double _scrollTravel = 0;
+
   late User user;
   late List<Widget> _pages;
 
   String picurl = '';
   List<SchoolInfo> schoolInfo = [];
   String? pic = '';
-  Color schoolColor = const Color(0xFFD71920);
+  /// Null until the school's colour is known; the tab bar then uses the theme colour.
+  Color? schoolColor = SchoolUtils.lastColor;
 
   @override
   void initState() {
@@ -67,7 +72,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _loadSchoolInfo() async {
     final result = await SchoolUtils.getSchoolInfoData();
     setState(() {
-      schoolColor = result['schoolColor'];
+      final color = result['schoolColor'];
+      if (color is Color && color.a > 0) schoolColor = color;
       picurl = result['picurl'];
       schoolInfo = result['schoolInfo'];
     });
@@ -80,7 +86,47 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _onItemTapped(int index) {
     setState(() {
       _selectedIndex = index;
+      // A new tab opens at its top, so the footer is full again.
+      _navCollapsed = false;
+      _scrollTravel = 0;
     });
+  }
+
+  void _setNavCollapsed(bool value) {
+    if (_navCollapsed == value) return;
+    setState(() => _navCollapsed = value);
+  }
+
+  /// Folds the footer when the page scrolls down and restores it on the way back up, like the
+  /// Instagram tab bar. Scroll notifications from any tab's list bubble up to here.
+  bool _onScroll(ScrollNotification notification) {
+    final metrics = notification.metrics;
+    if (metrics.axis != Axis.vertical) return false;
+
+    if (notification is ScrollUpdateNotification) {
+      final delta = notification.scrollDelta ?? 0;
+      final pixels = metrics.pixels;
+
+      // At the top the footer is always full; ignore the elastic bounce past either end.
+      if (pixels <= metrics.minScrollExtent + 8) {
+        _scrollTravel = 0;
+        _setNavCollapsed(false);
+        return false;
+      }
+      if (pixels >= metrics.maxScrollExtent) return false;
+      // A page that barely scrolls does not need the footer out of the way.
+      if (metrics.maxScrollExtent < 96) return false;
+
+      // Count travel in one direction; reverse and the count starts over.
+      if (delta != 0 && delta.sign != _scrollTravel.sign) _scrollTravel = 0;
+      _scrollTravel += delta;
+      if (_scrollTravel > 16) {
+        _setNavCollapsed(true);
+      } else if (_scrollTravel < -12) {
+        _setNavCollapsed(false);
+      }
+    }
+    return false;
   }
 
   @override
@@ -99,14 +145,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 : Brightness.dark,
           ),
       child: Scaffold(
-        body: SafeArea(
-          child: IndexedStack(index: _selectedIndex, children: _pages),
+        extendBody: true,
+        body: NotificationListener<ScrollNotification>(
+          onNotification: _onScroll,
+          child: SafeArea(
+            bottom: false,
+            child: IndexedStack(index: _selectedIndex, children: _pages),
+          ),
         ),
         bottomNavigationBar: TabNavigation(
           items: _tabs,
           currentIndex: _selectedIndex,
           onChanged: _onItemTapped,
           accent: schoolColor,
+          collapsed: _navCollapsed,
         ),
       ),
     );

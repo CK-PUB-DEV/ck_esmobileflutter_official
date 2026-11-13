@@ -69,12 +69,13 @@ class _HomeScreenState extends State<HomeScreen> {
   String? pic;
 
   List<SchoolInfo> schoolInfo = [];
-  Color schoolColor = const Color(0xFFD71920);
+  Color? schoolColor = SchoolUtils.lastColor;
 
   Future<void> _loadSchoolInfo() async {
     final result = await SchoolUtils.getSchoolInfoData();
     setState(() {
-      schoolColor = result['schoolColor'];
+      final color = result['schoolColor'];
+      if (color is Color && color.a > 0) schoolColor = color;
       picurl = result['picurl'];
       schoolInfo = result['schoolInfo'];
     });
@@ -146,7 +147,9 @@ class _HomeScreenState extends State<HomeScreen> {
       final list = await MessagesRepository.load(studid, userLogin.type);
       if (list != null) {
         await MessageReadStore.apply(list, studid);
-        setState(() => _notificationCount = list.where((m) => m.isUnread).length);
+        setState(
+          () => _notificationCount = list.where((m) => m.isUnread).length,
+        );
       }
     } catch (e) {
       print('Exception occurred: $e');
@@ -188,112 +191,103 @@ class _HomeScreenState extends State<HomeScreen> {
     final scheme = theme.colorScheme;
     final text = theme.textTheme;
     final name = '${user.firstname ?? ''} ${user.lastname ?? ''}'.trim();
+    // Tinted from the logged-in school's colour; the theme colour until that is known.
+    final tone = SchoolTone(context, schoolColor ?? scheme.primary);
 
-    return Scaffold(
-      backgroundColor: scheme.background,
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _initializeData,
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(Gap.lg, Gap.lg, Gap.lg, Gap.xl),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
+    return AppPage.root(
+      title: name.isEmpty ? 'Hello!' : 'Hello, ${user.firstname ?? name}!',
+      backgroundColor: tone.background,
+      onRefresh: _initializeData,
+      actions: [
+        _NotificationBell(
+          count: _notificationCount,
+          tone: tone,
+          onTap: () async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => NotificationsScreen()),
+            );
+            // Whatever was just viewed is now read on this phone.
+            if (mounted) getSMSBunker();
+          },
+        ),
+      ],
+      children: [
+        CarouselCard(
+          key: ValueKey(_carouselRefreshKey),
+          schoolColor: schoolColor,
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: Gap.xl, bottom: Gap.lg),
+          child: Row(
+            children: [
+              AccentBar(tone),
+              Gap.wSm,
+              Text('Features', style: text.large),
+            ],
+          ),
+        ),
+        GridView.builder(
+          physics: const NeverScrollableScrollPhysics(),
+          shrinkWrap: true,
+          itemCount: features.length,
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 4,
+            mainAxisSpacing: Gap.lg,
+            crossAxisSpacing: Gap.sm,
+            childAspectRatio: 0.72,
+          ),
+          itemBuilder: (context, index) {
+            final feature = features[index];
+            final label = feature['label'] as String;
+            // Tall rounded tile: a round icon well on top, the label under it.
+            return Semantics(
+              button: true,
+              label: label,
+              excludeSemantics: true,
+              child: RoundedCard(
+                radius: 24,
+                margin: EdgeInsets.zero,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: Gap.xs,
+                  vertical: Gap.md,
+                ),
+                onTap: () => _openFeature(index),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Hello!', style: text.muted),
-                          Gap.hXs,
-                          Text(
-                            name,
-                            style: text.h3,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: scheme.muted,
+                      ),
+                      child: Icon(
+                        feature['icon'] as IconData,
+                        size: IconSize.row + 2,
+                        color: scheme.foreground,
                       ),
                     ),
-                    Gap.wMd,
-                    _NotificationBell(
-                      count: _notificationCount,
-                      onTap: () async {
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => NotificationsScreen(),
-                          ),
-                        );
-                        // Whatever was just viewed is now read on this phone.
-                        if (mounted) getSMSBunker();
-                      },
+                    Gap.hSm,
+                    Text(
+                      label,
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: text.small.copyWith(
+                        fontSize: 11,
+                        height: 1.25,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ],
                 ),
-                Gap.hXl,
-                CarouselCard(key: ValueKey(_carouselRefreshKey)),
-                const SectionHeader('Features'),
-                GridView.builder(
-                  physics: const NeverScrollableScrollPhysics(),
-                  shrinkWrap: true,
-                  itemCount: features.length,
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 4,
-                    mainAxisSpacing: Gap.lg,
-                    crossAxisSpacing: Gap.sm,
-                    childAspectRatio: 0.78,
-                  ),
-                  itemBuilder: (context, index) {
-                    final feature = features[index];
-                    final label = feature['label'] as String;
-                    return Semantics(
-                      button: true,
-                      label: label,
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () => _openFeature(index),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            ShadCard(
-                              height: 60,
-                              width: 60,
-                              padding: EdgeInsets.zero,
-                              child: Center(
-                                child: Icon(
-                                  feature['icon'] as IconData,
-                                  size: IconSize.nav,
-                                  color: scheme.primary,
-                                ),
-                              ),
-                            ),
-                            Gap.hSm,
-                            Text(
-                              label,
-                              textAlign: TextAlign.center,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: text.small.copyWith(
-                                fontSize: 11,
-                                height: 1.25,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         ),
-      ),
+      ],
     );
   }
 
@@ -338,14 +332,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
 /// Bell with an unread count; the whole thing is a 44px touch target.
 class _NotificationBell extends StatelessWidget {
-  const _NotificationBell({required this.count, required this.onTap});
+  const _NotificationBell({
+    required this.count,
+    required this.tone,
+    required this.onTap,
+  });
 
   final int count;
+  final SchoolTone tone;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final theme = ShadTheme.of(context);
     return Semantics(
       button: true,
       label: count > 0 ? 'Notifications, $count unread' : 'Notifications',
@@ -359,18 +357,17 @@ class _NotificationBell extends StatelessWidget {
             clipBehavior: Clip.none,
             alignment: Alignment.center,
             children: [
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius: theme.radius,
-                  border: Border.all(color: theme.colorScheme.border),
-                ),
-                child: SizedBox(
-                  width: kMinTap,
-                  height: kMinTap,
+              SizedBox(
+                width: kMinTap,
+                height: kMinTap,
+                child: RoundedCard(
+                  radius: 999,
+                  margin: EdgeInsets.zero,
+                  padding: EdgeInsets.zero,
                   child: Icon(
                     count > 0 ? LucideIcons.bellRing : LucideIcons.bell,
                     size: IconSize.row,
-                    color: theme.colorScheme.foreground,
+                    color: ShadTheme.of(context).colorScheme.foreground,
                   ),
                 ),
               ),

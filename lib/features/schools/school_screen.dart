@@ -11,6 +11,7 @@ import 'package:pushtrial/features/schools/models/schools.dart';
 import 'package:pushtrial/shared/widgets/ui/ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+import 'package:pushtrial/shared/utils/school_utils.dart';
 
 class SchoolScreen extends StatefulWidget {
   const SchoolScreen({super.key});
@@ -106,6 +107,7 @@ class _SchoolScreenState extends State<SchoolScreen> {
     }
     setState(() => selectingSchool = true);
     try {
+      SchoolUtils.reset();
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('selectedSchool', AppConfig.secureUrl(school.eslink));
       await prefs.setString('schoolVersion', school.schoolVersion);

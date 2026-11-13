@@ -11,7 +11,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pushtrial/shared/widgets/ui/ui.dart';
 
 class CarouselCard extends StatefulWidget {
-  const CarouselCard({super.key});
+  const CarouselCard({super.key, this.schoolColor});
+
+  /// The logged-in school's colour; null falls back to the theme colour.
+  final Color? schoolColor;
 
   @override
   State<CarouselCard> createState() => _CarouselCardState();
@@ -28,6 +31,7 @@ class _CarouselCardState extends State<CarouselCard> {
   // Shown instead of a misleading "₱ 0.00" while the balance loads or when it can't be loaded.
   bool _balanceLoading = true;
   String? _balanceError;
+  bool _isBalanceVisible = true;
 
   List<Ledger> data = [];
   List<EnrolledStud> enrolledstud = [];
@@ -86,6 +90,10 @@ class _CarouselCardState extends State<CarouselCard> {
       _balanceLoading = false;
       _balanceError = message;
     });
+  }
+
+  void _toggleBalanceVisibility() {
+    setState(() => _isBalanceVisible = !_isBalanceVisible);
   }
 
   // Prefer the server's own reason (e.g. "Student Ledger is currently unavailable.").
@@ -258,81 +266,135 @@ class _CarouselCardState extends State<CarouselCard> {
         : latestInfo.strandname;
     final balanceText = _balanceError ??
         Fmt.money(totalBalance.replaceFirst('PHP', '').trim());
+    final tone = SchoolTone(context, widget.schoolColor ?? scheme.primary);
+    final onSolid = tone.onSolid;
+
+    // Neutral pill for secondary facts on the white card; colour stays on the filled surfaces.
+    Widget pill(String label) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: Gap.md, vertical: Gap.xs + 2),
+      decoration: BoxDecoration(
+        color: scheme.muted,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: text.small.copyWith(fontWeight: FontWeight.w600),
+      ),
+    );
+
     return Column(
       children: [
-        AppCard(
+        // Hero: the balance is the one number a parent opens the app for, so it gets the fill.
+        SolidCard(
+          tone: tone,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
+              Wrap(
+                spacing: Gap.sm,
+                runSpacing: Gap.sm,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  Icon(
-                    LucideIcons.wallet,
-                    color: scheme.primary,
-                    size: IconSize.row,
+                  Icon(LucideIcons.wallet, color: onSolid, size: IconSize.row),
+                  Text(
+                    'Current balance',
+                    style: text.small.copyWith(
+                      color: onSolid.withValues(alpha: 0.85),
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                  Gap.wSm,
-                  Text('Current balance', style: text.muted),
+                  if (syDesc.isNotEmpty)
+                    SchoolPill(
+                      'SY $syDesc${sem.isNotEmpty ? ' · $sem' : ''}',
+                      tone,
+                      onCard: true,
+                    ),
                 ],
               ),
-              Gap.hMd,
+              Gap.hLg,
               if (_balanceLoading)
-                const SkeletonBox(height: 32, width: 140)
+                SkeletonBox(height: 36, width: 160)
               else
-                Text(
-                  balanceText,
-                  style: _balanceError == null
-                      ? text.h2.copyWith(color: scheme.foreground)
-                      : text.muted,
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: _balanceError == null && !_isBalanceVisible
+                          ? Semantics(
+                              label: 'Balance hidden',
+                              child: ExcludeSemantics(
+                                child: Text(
+                                  '••••••••',
+                                  style: text.h1.copyWith(color: onSolid),
+                                ),
+                              ),
+                            )
+                          : Text(
+                              balanceText,
+                              style: _balanceError == null
+                                  ? text.h1.copyWith(color: onSolid)
+                                  : text.p.copyWith(
+                                      color: onSolid.withValues(alpha: 0.9),
+                                    ),
+                            ),
+                    ),
+                    if (_balanceError == null)
+                      Semantics(
+                        button: true,
+                        label: _isBalanceVisible
+                            ? 'Hide balance'
+                            : 'Show balance',
+                        child: Tooltip(
+                          message: _isBalanceVisible
+                              ? 'Hide balance'
+                              : 'Show balance',
+                          child: ShadButton.ghost(
+                            onPressed: _toggleBalanceVisibility,
+                            child: Icon(
+                              _isBalanceVisible
+                                  ? LucideIcons.eyeOff
+                                  : LucideIcons.eye,
+                              color: onSolid,
+                              size: IconSize.row,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
-              if (syDesc.isNotEmpty) ...[
-                Gap.hSm,
-                Text(
-                  'SY $syDesc${sem.isNotEmpty ? ' · $sem' : ''}',
-                  style: text.small.copyWith(color: scheme.mutedForeground),
-                ),
-              ],
             ],
           ),
         ),
-        AppCard(
+        RoundedCard(
           margin: EdgeInsets.zero,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  Icon(
-                    LucideIcons.school,
-                    color: scheme.primary,
-                    size: IconSize.row,
-                  ),
+                  Icon(LucideIcons.school, color: scheme.foreground, size: IconSize.row),
                   Gap.wSm,
-                  Text('Enrollment', style: text.muted),
+                  Expanded(child: Text('Enrollment', style: text.muted)),
+                  SchoolPill(sidText, tone),
                 ],
               ),
-              Gap.hMd,
-              Text(sidText, style: text.h4),
-              if (latestInfo.levelname.isNotEmpty) ...[
-                Gap.hXs,
-                Text(latestInfo.levelname, style: text.small.copyWith(height: 1.5)),
+              if (latestInfo.levelname.isNotEmpty ||
+                  program.isNotEmpty ||
+                  latestInfo.sectionname.isNotEmpty) ...[
+                Gap.hLg,
+                if (latestInfo.levelname.isNotEmpty)
+                  Text(latestInfo.levelname, style: text.h4),
+                Gap.hSm,
+                Wrap(
+                  spacing: Gap.sm,
+                  runSpacing: Gap.sm,
+                  children: [
+                    if (program.isNotEmpty) pill(program),
+                    if (latestInfo.sectionname.isNotEmpty)
+                      pill(latestInfo.sectionname),
+                  ],
+                ),
               ],
-              if (program.isNotEmpty)
-                Text(
-                  program,
-                  style: text.small.copyWith(
-                    color: scheme.mutedForeground,
-                    height: 1.5,
-                  ),
-                ),
-              if (latestInfo.sectionname.isNotEmpty)
-                Text(
-                  latestInfo.sectionname,
-                  style: text.small.copyWith(
-                    color: scheme.mutedForeground,
-                    height: 1.5,
-                  ),
-                ),
             ],
           ),
         ),

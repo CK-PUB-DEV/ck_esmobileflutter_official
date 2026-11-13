@@ -16,6 +16,7 @@ import 'package:pushtrial/models/enrolled_stud.dart';
 import 'package:pushtrial/core/services/school_alerts.dart';
 import 'package:pushtrial/core/config/theme_controller.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+import 'package:pushtrial/shared/utils/school_utils.dart';
 import 'package:pushtrial/shared/widgets/ui/ui.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -41,7 +42,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String? pic;
   String? picurl;
   List<SchoolInfo> schoolInfo = [];
-  Color schoolColor = const Color(0xFFD71920);
+
+  /// The logged-in school's colour (SchoolUtils); the theme colour while it is unknown.
+  Color? _schoolColor = SchoolUtils.lastColor;
+  Color get schoolColor =>
+      _schoolColor ?? ShadTheme.of(context).colorScheme.primary;
   Color get accentColor => ShadTheme.of(context).colorScheme.primary;
   List<EnrolledStud> enrolledstud = [];
   bool realtimeAlerts = false;
@@ -49,13 +54,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   /// False for a school whose server has no app alerts yet: the switch would do nothing there.
   bool alertsAvailable = true;
 
-  Color hexToColor(String hexString) {
-    final hex = hexString.replaceFirst('#', '');
-    final value = hex.length == 6 ? 'FF$hex' : hex;
-    if (value.length != 8) return const Color(0xFFD71920);
-    final parsed = int.tryParse(value, radix: 16);
-    return parsed == null ? const Color(0xFFD71920) : Color(parsed);
-  }
+  SchoolTone get _tone => SchoolTone(context, schoolColor);
 
   Future<void> getSchoolInfo() async {
     final response = await CallApi().getSchoolInfo();
@@ -68,7 +67,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             .toList()
             .cast<SchoolInfo>();
 
-        schoolColor = hexToColor(schoolInfo[0].schoolcolor);
+        final parsed = SchoolUtils.parseColor(schoolInfo[0].schoolcolor);
+        if (parsed != null) {
+          _schoolColor = parsed;
+          SchoolUtils.remember(parsed);
+        }
       });
     }
   }
@@ -139,15 +142,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = ShadTheme.of(context).colorScheme;
-    return Scaffold(
-      backgroundColor: scheme.background,
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        title: const Text('Profile'),
-        centerTitle: false,
-        shape: Border(bottom: BorderSide(color: scheme.border)),
-      ),
+    return AppPage.root(
+      title: 'Profile',
+      backgroundColor: _tone.background,
       body: loading
           ? const LoadingSkeleton()
           : RefreshIndicator(
@@ -155,11 +152,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
               onRefresh: () => _initializeData(showLoading: false),
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(
+                padding: EdgeInsets.fromLTRB(
                   Gap.lg,
                   Gap.lg,
                   Gap.lg,
-                  Gap.xl,
+                  Gap.xl + MediaQuery.paddingOf(context).bottom,
                 ),
                 children: [
                   _buildProfileHeader(),
@@ -298,7 +295,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ShadButton.destructive(
                     onPressed: () => _logout(context),
                     width: double.infinity,
-                    height: kMinTap + 4,
+                    height: kMinTap + 8,
+                    decoration: ShadDecoration(
+                      border: ShadBorder.all(
+                        radius: BorderRadius.circular(999),
+                      ),
+                    ),
                     leading: const Icon(LucideIcons.logOut, size: IconSize.row),
                     child: const Text('Log out'),
                   ),
@@ -320,19 +322,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final schoolName = schoolInfo.isEmpty ? '' : schoolInfo.first.schoolname;
     final imageUrl = _studentImageUrl();
 
-    return AppCard(
-      padding: const EdgeInsets.all(Gap.xl),
+    final tone = _tone;
+    final onSolid = tone.onSolid;
+
+    return SolidCard(
+      tone: tone,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Container(
-            width: 72,
-            height: 72,
-            padding: const EdgeInsets.all(Gap.xs),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: theme.colorScheme.border, width: 2),
-            ),
+            width: 76,
+            height: 76,
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(shape: BoxShape.circle, color: onSolid),
             child: ClipOval(
               child: imageUrl == null
                   ? _buildStudentAvatar()
@@ -354,7 +356,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   name.isEmpty ? 'Student profile' : name,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: text.h4,
+                  style: text.h4.copyWith(color: onSolid),
                 ),
                 if (schoolName.isNotEmpty) ...[
                   Gap.hXs,
@@ -362,12 +364,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     schoolName,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: text.muted,
+                    style: text.small.copyWith(
+                      color: onSolid.withValues(alpha: 0.85),
+                    ),
                   ),
                 ],
                 if (widget.user.sid != null && widget.user.sid!.isNotEmpty) ...[
-                  Gap.hSm,
-                  ShadBadge.secondary(child: Text('ID ${widget.user.sid}')),
+                  Gap.hMd,
+                  SchoolPill('ID ${widget.user.sid}', tone, onCard: true),
                 ],
               ],
             ),
@@ -484,13 +488,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     required List<Widget> children,
   }) {
     final theme = ShadTheme.of(context);
-    return AppCard(
+    return RoundedCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, color: theme.colorScheme.primary, size: IconSize.row),
+              SchoolIcon(icon),
               Gap.wSm,
               Expanded(
                 child: Text(
@@ -503,6 +507,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
           Gap.hMd,
+          Divider(height: 1, thickness: 1, color: theme.colorScheme.border),
+          Gap.hSm,
           ...children,
         ],
       ),
@@ -523,11 +529,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         constraints: const BoxConstraints(minHeight: kMinTap),
         child: Row(
           children: [
-            Icon(
-              icon,
-              color: theme.colorScheme.mutedForeground,
-              size: IconSize.row,
-            ),
+            SchoolIcon(icon, size: 36),
             Gap.wMd,
             Expanded(
               child: Column(
@@ -545,7 +547,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
             Gap.wMd,
-            ShadSwitch(value: value, onChanged: onChanged),
+            ShadSwitch(
+              value: value,
+              onChanged: onChanged,
+              checkedTrackColor: schoolColor,
+            ),
           ],
         ),
       ),
@@ -571,6 +577,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       await FirebasePush.onLoggedOut(studid, type);
     }
 
+    SchoolUtils.reset();
     await SchoolAlerts.onLoggedOut();
     await AuthToken.clear();
     await prefs.remove('user');

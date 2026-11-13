@@ -7,6 +7,7 @@ import 'package:syncfusion_flutter_calendar/calendar.dart';
 import 'package:pushtrial/core/api/api.dart';
 import 'package:pushtrial/models/event.dart';
 import 'package:pushtrial/models/enrolled_stud.dart';
+import 'package:pushtrial/shared/utils/school_utils.dart';
 import 'package:pushtrial/shared/widgets/ui/ui.dart';
 
 class SchoolCalendar extends StatefulWidget {
@@ -17,12 +18,12 @@ class SchoolCalendar extends StatefulWidget {
 }
 
 class _SchoolCalendarState extends State<SchoolCalendar> {
-
   // Slow responses can finish after the screen was closed; skip the update then.
   @override
   void setState(VoidCallback fn) {
     if (mounted) super.setState(fn);
   }
+
   var id = '0';
   var syid = 0;
   String selectedYear = '';
@@ -31,6 +32,9 @@ class _SchoolCalendarState extends State<SchoolCalendar> {
 
   late List<Appointment> _appointments = [];
   bool loading = true;
+
+  /// The logged-in school's colour; null until loaded, then the theme colour is used.
+  Color? schoolColor = SchoolUtils.lastColor;
   List<EnrolledStud> enrolledstud = [];
 
   @override
@@ -51,7 +55,7 @@ class _SchoolCalendarState extends State<SchoolCalendar> {
     }).toList();
   }
 
-  List<TimeRegion> _getSpecialRegions(ShadColorScheme colors) {
+  List<TimeRegion> _getSpecialRegions(ShadColorScheme colors, Color accent) {
     List<TimeRegion> specialRegions = [];
 
     for (Appointment appointment in _appointments) {
@@ -61,7 +65,7 @@ class _SchoolCalendarState extends State<SchoolCalendar> {
           endTime: appointment.endTime,
           enablePointerInteraction: false,
           textStyle: TextStyle(color: colors.foreground),
-          color: colors.primary.withValues(alpha: 0.10),
+          color: accent.withValues(alpha: 0.10),
         ),
       );
     }
@@ -72,6 +76,9 @@ class _SchoolCalendarState extends State<SchoolCalendar> {
   Future<void> getUser() async {
     SharedPreferences preferences = await SharedPreferences.getInstance();
     final json = preferences.getString('studid');
+
+    final color = await SchoolUtils.schoolColor();
+    if (color != null) setState(() => schoolColor = color);
 
     if (json != null) {
       setState(() {
@@ -143,50 +150,48 @@ class _SchoolCalendarState extends State<SchoolCalendar> {
     });
   }
 
-  Widget _calendar(ShadThemeData theme) {
+  Widget _calendar(ShadThemeData theme, SchoolTone tone) {
     final colors = theme.colorScheme;
     final text = theme.textTheme;
-    return SizedBox(
-      height: 400,
-      child: ClipRRect(
-        borderRadius: theme.radius,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: colors.card,
-            border: Border.all(color: colors.border),
-            borderRadius: theme.radius,
+    final accent = schoolColor ?? colors.primary;
+    return RoundedCard(
+      padding: const EdgeInsets.fromLTRB(Gap.sm, Gap.md, Gap.sm, Gap.sm),
+      child: SizedBox(
+        height: 400,
+        child: SfCalendar(
+          view: CalendarView.month,
+          initialSelectedDate: DateTime.now(),
+          dataSource: _AppointmentDataSource(_appointments),
+          appointmentBuilder: appointmentBuilder,
+          onTap: onTapCalendarCell,
+          specialRegions: _getSpecialRegions(colors, accent),
+          backgroundColor: Colors.transparent,
+          cellBorderColor: Colors.transparent,
+          todayHighlightColor: accent,
+          todayTextStyle: text.small.copyWith(
+            color: tone.onSolid,
+            fontWeight: FontWeight.w700,
           ),
-          child: SfCalendar(
-            view: CalendarView.month,
-            initialSelectedDate: DateTime.now(),
-            dataSource: _AppointmentDataSource(_appointments),
-            appointmentBuilder: appointmentBuilder,
-            onTap: onTapCalendarCell,
-            specialRegions: _getSpecialRegions(colors),
-            backgroundColor: colors.card,
-            cellBorderColor: colors.border,
-            todayHighlightColor: colors.primary,
-            headerStyle: CalendarHeaderStyle(
-              textStyle: text.large,
-              backgroundColor: colors.card,
-            ),
-            viewHeaderStyle: ViewHeaderStyle(
-              backgroundColor: colors.card,
-              dayTextStyle: text.small.copyWith(color: colors.mutedForeground),
-            ),
-            selectionDecoration: BoxDecoration(
-              border: Border.all(color: colors.primary, width: 1.5),
-              borderRadius: BorderRadius.circular(Gap.xs),
-            ),
-            monthViewSettings: MonthViewSettings(
-              monthCellStyle: MonthCellStyle(
-                textStyle: text.small.copyWith(color: colors.foreground),
-                trailingDatesTextStyle: text.small.copyWith(
-                  color: colors.mutedForeground,
-                ),
-                leadingDatesTextStyle: text.small.copyWith(
-                  color: colors.mutedForeground,
-                ),
+          headerStyle: CalendarHeaderStyle(
+            textStyle: text.large,
+            backgroundColor: Colors.transparent,
+          ),
+          viewHeaderStyle: ViewHeaderStyle(
+            backgroundColor: Colors.transparent,
+            dayTextStyle: text.small.copyWith(color: colors.mutedForeground),
+          ),
+          selectionDecoration: BoxDecoration(
+            border: Border.all(color: accent, width: 1.5),
+            borderRadius: BorderRadius.circular(Gap.md),
+          ),
+          monthViewSettings: MonthViewSettings(
+            monthCellStyle: MonthCellStyle(
+              textStyle: text.small.copyWith(color: colors.foreground),
+              trailingDatesTextStyle: text.small.copyWith(
+                color: colors.mutedForeground,
+              ),
+              leadingDatesTextStyle: text.small.copyWith(
+                color: colors.mutedForeground,
               ),
             ),
           ),
@@ -195,20 +200,63 @@ class _SchoolCalendarState extends State<SchoolCalendar> {
     );
   }
 
-  Widget _eventCard(Event event) {
+  Widget _eventCard(Event event, SchoolTone tone) {
     final text = ShadTheme.of(context).textTheme;
-    return AppCard(
-      margin: const EdgeInsets.only(bottom: Gap.md),
-      child: Column(
+    final scheme = ShadTheme.of(context).colorScheme;
+    final start = event.startTime;
+    final hasDate = start.year > 1;
+    Widget detail(IconData icon, String value) => Row(
+      children: [
+        Icon(icon, size: IconSize.inline, color: scheme.mutedForeground),
+        Gap.wXs,
+        Expanded(child: Text(value, style: text.muted)),
+      ],
+    );
+    return RoundedCard(
+      padding: const EdgeInsets.all(Gap.lg),
+      radius: 24,
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(event.title, style: text.large),
-          Gap.hSm,
-          if (event.venue.isNotEmpty)
-            InfoRow('Venue', event.venue, icon: LucideIcons.mapPin),
-          InfoRow('Date', Fmt.date(event.startTime), icon: LucideIcons.calendar),
-          if (event.time.isNotEmpty)
-            InfoRow('Time', event.time, icon: LucideIcons.clock),
+          // Filled date block: the colour sits on the background, the text on it is white.
+          Container(
+            width: 56,
+            padding: const EdgeInsets.symmetric(vertical: Gap.sm),
+            decoration: BoxDecoration(
+              color: tone.solid,
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Column(
+              children: [
+                Text(
+                  hasDate ? '${start.day}' : '-',
+                  style: text.h3.copyWith(color: tone.onSolid, height: 1.1),
+                ),
+                Text(
+                  hasDate ? DateFormat('MMM').format(start).toUpperCase() : '',
+                  style: text.small.copyWith(
+                    color: tone.onSolid.withValues(alpha: 0.85),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Gap.wMd,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(event.title, style: text.large),
+                Gap.hXs,
+                if (event.venue.isNotEmpty)
+                  detail(LucideIcons.mapPin, event.venue),
+                if (event.time.isNotEmpty)
+                  detail(LucideIcons.clock, event.time),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -217,22 +265,28 @@ class _SchoolCalendarState extends State<SchoolCalendar> {
   @override
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
+    final tone = SchoolTone(context, schoolColor ?? theme.colorScheme.primary);
 
     if (loading) {
-      return const AppPage(title: 'School calendar', body: LoadingSkeleton());
+      return const AppPage.root(
+        title: 'School calendar',
+        body: LoadingSkeleton(),
+      );
     }
 
     final sortedEvents = List<Event>.from(events)
       ..sort((a, b) => b.startTime.compareTo(a.startTime));
 
-    return AppPage(
+    return AppPage.root(
       title: 'School calendar',
+      backgroundColor: tone.background,
       children: [
         ShadSelect<String>(
           initialValue: selectedYear.isNotEmpty ? selectedYear : null,
           placeholder: const Text('Choose a school year'),
           options: [
-            for (final year in years) ShadOption(value: year, child: Text(year)),
+            for (final year in years)
+              ShadOption(value: year, child: Text(year)),
           ],
           selectedOptionBuilder: (context, value) => Text(value),
           onChanged: (String? newValue) {
@@ -249,8 +303,17 @@ class _SchoolCalendarState extends State<SchoolCalendar> {
           },
         ),
         Gap.hLg,
-        _calendar(theme),
-        SectionHeader('Events'),
+        _calendar(theme, tone),
+        Padding(
+          padding: const EdgeInsets.only(top: Gap.sm, bottom: Gap.md),
+          child: Row(
+            children: [
+              AccentBar(tone),
+              Gap.wSm,
+              Text('Events', style: theme.textTheme.large),
+            ],
+          ),
+        ),
         if (sortedEvents.isEmpty)
           const SizedBox(
             height: 200,
@@ -261,7 +324,7 @@ class _SchoolCalendarState extends State<SchoolCalendar> {
             ),
           )
         else
-          for (final event in sortedEvents) _eventCard(event),
+          for (final event in sortedEvents) _eventCard(event, tone),
       ],
     );
   }
@@ -330,10 +393,12 @@ class _SchoolCalendarState extends State<SchoolCalendar> {
         ? details.appointments.first.subject
         : '+${details.appointments.length}';
     if (details.appointments.isEmpty) return const SizedBox.shrink();
+    final tone = SchoolTone(context, schoolColor ?? theme.colorScheme.primary);
     return Container(
+      padding: const EdgeInsets.symmetric(horizontal: Gap.sm),
       decoration: BoxDecoration(
-        color: theme.colorScheme.primary,
-        borderRadius: BorderRadius.circular(Gap.sm),
+        color: tone.solid,
+        borderRadius: BorderRadius.circular(999),
       ),
       child: Center(
         child: Text(
@@ -341,7 +406,8 @@ class _SchoolCalendarState extends State<SchoolCalendar> {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: theme.textTheme.small.copyWith(
-            color: theme.colorScheme.primaryForeground,
+            color: tone.onSolid,
+            fontWeight: FontWeight.w700,
           ),
         ),
       ),
