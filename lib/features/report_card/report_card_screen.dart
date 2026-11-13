@@ -2,15 +2,15 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:pushtrial/api/api.dart';
+import 'package:pushtrial/core/api/api.dart';
 import 'package:pushtrial/models/grades.dart';
 import 'package:pushtrial/models/school_info.dart';
 import 'package:pushtrial/models/year_sem.dart';
 import 'package:pushtrial/models/attendance.dart';
 import 'package:pushtrial/models/observedvalues.dart';
 import 'package:pushtrial/models/enrolled_stud.dart';
-import 'package:pushtrial/services/grading_setup.dart';
-import 'package:pushtrial/widgets/ui/ui.dart';
+import 'package:pushtrial/core/services/grading_setup.dart';
+import 'package:pushtrial/shared/widgets/ui/ui.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 class ReportCardScreen extends StatefulWidget {
