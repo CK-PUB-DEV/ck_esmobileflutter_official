@@ -458,6 +458,16 @@ class _ReportCardScreenState extends State<ReportCardScreen> {
     if (value == 'values') getObservedValues();
   }
 
+  /// "SY 2025-2026 · 1st Semester" for the hero card.
+  String? _heroPill() {
+    final year = schoolYear.where((y) => y.id.toString() == selectedYear).map((y) => y.sydesc).firstOrNull;
+    if (year == null) return null;
+    final sem = (gradelevel >= 14 && gradelevel != 16)
+        ? schoolSem.where((x) => x.id.toString() == selectedSem).map((x) => x.semester).firstOrNull
+        : null;
+    return sem == null ? 'SY $year' : 'SY $year · $sem';
+  }
+
   @override
   Widget build(BuildContext context) {
     return AppPage(
@@ -467,7 +477,7 @@ class _ReportCardScreenState extends State<ReportCardScreen> {
           : [
               Padding(
                 padding: const EdgeInsets.only(right: Gap.lg),
-                child: Center(child: ShadBadge.secondary(child: Text(_levelLabel))),
+                child: Center(child: SchoolPill(_levelLabel, SchoolTone.current(context))),
               ),
             ],
       body: loading
@@ -476,6 +486,13 @@ class _ReportCardScreenState extends State<ReportCardScreen> {
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(Gap.lg, Gap.sm, Gap.lg, Gap.xl),
               children: [
+                if (concatenatedArray.isNotEmpty && (_isCollege || _tab == 'grades'))
+                  HeroCard(
+                    label: 'Report card',
+                    icon: LucideIcons.graduationCap,
+                    value: '${concatenatedArray.length} subject${concatenatedArray.length == 1 ? '' : 's'}',
+                    pill: _heroPill(),
+                  ),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -504,13 +521,13 @@ class _ReportCardScreenState extends State<ReportCardScreen> {
                 if (_isCollege)
                   ..._gradesChildren()
                 else ...[
-                  ShadTabs<String>(
+                  PillToggle<String>(
                     value: _tab,
                     onChanged: _onTabChanged,
-                    tabs: const [
-                      ShadTab(value: 'grades', child: Text('Grades')),
-                      ShadTab(value: 'attendance', child: Text('Attendance')),
-                      ShadTab(value: 'values', child: Text('Core values')),
+                    options: const [
+                      (value: 'grades', label: 'Grades'),
+                      (value: 'attendance', label: 'Attendance'),
+                      (value: 'values', label: 'Core values'),
                     ],
                   ),
                   Gap.hLg,
@@ -822,14 +839,24 @@ class _SubjectCard extends StatelessWidget {
                   child: Text(summary.label, style: text.muted),
                 ),
                 Gap.wSm,
-                Text(
-                  summary.value.isEmpty ? '—' : summary.value,
-                  style: text.h4.copyWith(
-                    color: summary.value.isEmpty
-                        ? theme.colorScheme.mutedForeground
-                        : theme.colorScheme.foreground,
+                if (summary.value.isEmpty)
+                  Text(
+                    '—',
+                    style: text.h4.copyWith(color: theme.colorScheme.mutedForeground),
+                  )
+                else
+                  // The grade sits on a filled school-colour block, like the date blocks elsewhere.
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: Gap.md, vertical: Gap.xs),
+                    decoration: BoxDecoration(
+                      color: SchoolTone.current(context).solid,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Text(
+                      summary.value,
+                      style: text.h4.copyWith(color: SchoolTone.current(context).onSolid),
+                    ),
                   ),
-                ),
                 if (summary.remark.isNotEmpty) ...[
                   Gap.wSm,
                   StatusBadge(
@@ -860,7 +887,7 @@ class _GradeCell extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: Gap.sm, horizontal: Gap.xs),
       decoration: BoxDecoration(
         color: theme.colorScheme.muted,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -932,11 +959,11 @@ class _LoadingBlocks extends StatelessWidget {
   Widget build(BuildContext context) {
     return const Column(
       children: [
-        SkeletonBox(height: 96, radius: 12),
+        SkeletonBox(height: 96, radius: AppRadius.row),
         Gap.hMd,
-        SkeletonBox(height: 96, radius: 12),
+        SkeletonBox(height: 96, radius: AppRadius.row),
         Gap.hMd,
-        SkeletonBox(height: 96, radius: 12),
+        SkeletonBox(height: 96, radius: AppRadius.row),
       ],
     );
   }

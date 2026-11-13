@@ -93,9 +93,12 @@ class _SchoolScreenState extends State<SchoolScreen> {
     ShadToaster.of(context).show(ShadToast.destructive(description: Text(message)));
   }
 
-  Future<void> _toggleTheme() async {
+  Future<void> _toggleTheme(BuildContext buttonContext) async {
     final controller = AppThemeController.instance;
-    final saved = await controller.setDark(!controller.isDark);
+    final saved = await controller.setDark(
+      !controller.isDark,
+      origin: originOf(buttonContext),
+    );
     if (!saved) _toast('Could not save your appearance setting.');
   }
 
@@ -174,7 +177,7 @@ class _SchoolScreenState extends State<SchoolScreen> {
     final text = theme.textTheme;
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     const onHeader = Colors.white;
-    const searchRadius = BorderRadius.all(Radius.circular(16));
+    final searchRadius = BorderRadius.circular(AppRadius.pill);
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
@@ -215,10 +218,10 @@ class _SchoolScreenState extends State<SchoolScreen> {
                             shape: const CircleBorder(),
                             child: InkWell(
                               customBorder: const CircleBorder(),
-                              onTap: _toggleTheme,
+                              onTap: () => _toggleTheme(context),
                               child: SizedBox(
-                                width: 44,
-                                height: 44,
+                                width: kTapTarget,
+                                height: kTapTarget,
                                 child: Icon(
                                   AppThemeController.instance.isDark
                                       ? LucideIcons.sun
@@ -312,8 +315,8 @@ class _SchoolScreenState extends State<SchoolScreen> {
                           ),
                     decoration: ShadDecoration(
                       color: scheme.card,
-                      border: const ShadBorder.fromBorderSide(
-                        ShadBorderSide(color: Colors.transparent, width: 1.5),
+                      border: ShadBorder.fromBorderSide(
+                        const ShadBorderSide(color: Colors.transparent, width: 1.5),
                         radius: searchRadius,
                       ),
                       focusedBorder: ShadBorder.fromBorderSide(
@@ -326,7 +329,7 @@ class _SchoolScreenState extends State<SchoolScreen> {
                           color: Colors.white.withValues(alpha: 0.35),
                           width: 4,
                         ),
-                        radius: const BorderRadius.all(Radius.circular(20)),
+                        radius: searchRadius,
                       ),
                       shadows: [
                         BoxShadow(
@@ -419,22 +422,9 @@ class _SchoolScreenState extends State<SchoolScreen> {
                               ),
                             ),
                           ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: Gap.md,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: scheme.primary.withValues(alpha: 0.10),
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                            child: Text(
-                              '$count ${count == 1 ? 'school' : 'schools'}',
-                              style: text.small.copyWith(
-                                color: scheme.primary,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
+                          SchoolPill(
+                            '$count ${count == 1 ? 'school' : 'schools'}',
+                            SchoolTone.current(context),
                           ),
                         ],
                       ),
@@ -472,113 +462,68 @@ class _SchoolScreenState extends State<SchoolScreen> {
     final theme = ShadTheme.of(context);
     final scheme = theme.colorScheme;
     final text = theme.textTheme;
-    final radius = BorderRadius.circular(22);
+    final tone = SchoolTone.current(context);
     return Semantics(
       button: true,
       label: 'Open ${school.schoolname}',
-      child: Container(
-        decoration: BoxDecoration(
-          color: scheme.card,
-          borderRadius: radius,
-          border: Border.all(color: scheme.border),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
-              blurRadius: 18,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Material(
-          type: MaterialType.transparency,
-          borderRadius: radius,
-          child: InkWell(
-            borderRadius: radius,
-            onTap: selectingSchool ? null : () => _selectSchool(school),
-            child: Padding(
-              padding: const EdgeInsets.all(Gap.lg),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 60,
-                    height: 60,
-                    padding: const EdgeInsets.all(Gap.sm),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: scheme.border),
-                    ),
-                    child: ClipOval(
-                      child: school.schoollogo.isEmpty
-                          ? _fallbackLogo()
-                          : CachedNetworkImage(
-                              imageUrl: '$host${school.schoollogo}',
-                              fit: BoxFit.contain,
-                              placeholder: (context, url) => _fallbackLogo(),
-                              errorWidget: (context, url, error) =>
-                                  _fallbackLogo(),
-                            ),
-                    ),
-                  ),
-                  Gap.hMd,
-                  Text(
-                    school.schoolname,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                    style: text.small.copyWith(
-                      fontWeight: FontWeight.w700,
-                      height: 1.3,
-                    ),
-                  ),
-                  const Spacer(),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: Gap.md,
-                            vertical: 5,
-                          ),
-                          decoration: BoxDecoration(
-                            color: scheme.primary.withValues(alpha: 0.10),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            school.schoolabrv.isEmpty ? 'School' : school.schoolabrv,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: text.small.copyWith(
-                              color: scheme.primary,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                        ),
+      excludeSemantics: true,
+      child: RoundedCard(
+        radius: AppRadius.row,
+        margin: EdgeInsets.zero,
+        padding: const EdgeInsets.all(Gap.lg),
+        onTap: selectingSchool ? null : () => _selectSchool(school),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 60,
+              height: 60,
+              padding: const EdgeInsets.all(Gap.sm),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                border: Border.all(color: scheme.border),
+              ),
+              child: ClipOval(
+                child: school.schoollogo.isEmpty
+                    ? _fallbackLogo()
+                    : CachedNetworkImage(
+                        imageUrl: '$host${school.schoollogo}',
+                        fit: BoxFit.contain,
+                        placeholder: (context, url) => _fallbackLogo(),
+                        errorWidget: (context, url, error) => _fallbackLogo(),
                       ),
-                      Gap.wSm,
-                      Container(
-                        width: 30,
-                        height: 30,
-                        decoration: BoxDecoration(
-                          color: scheme.primary,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          LucideIcons.arrowRight,
-                          color: scheme.primaryForeground,
-                          size: IconSize.inline,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
               ),
             ),
-          ),
+            Gap.hMd,
+            Text(
+              school.schoolname,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: text.small.copyWith(fontWeight: FontWeight.w700, height: 1.3),
+            ),
+            const Spacer(),
+            Row(
+              children: [
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: SchoolPill(
+                      school.schoolabrv.isEmpty ? 'School' : school.schoolabrv,
+                      tone,
+                    ),
+                  ),
+                ),
+                Gap.wSm,
+                Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(color: tone.solid, shape: BoxShape.circle),
+                  child: Icon(LucideIcons.arrowRight, color: tone.onSolid, size: IconSize.inline),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );

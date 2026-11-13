@@ -29,6 +29,7 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  final GlobalKey _darkSwitchKey = GlobalKey();
   User user = UserData.myUser;
   Login userLogin = UserDataLogin.myUserLogin;
   String id = '0';
@@ -164,26 +165,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     title: 'Appearance',
                     icon: LucideIcons.palette,
                     children: [
-                      _buildSettingRow(
-                        icon: AppThemeController.instance.isDark
-                            ? LucideIcons.moon
-                            : LucideIcons.sun,
-                        title: 'Dark mode',
-                        subtitle: 'Use a darker appearance throughout the app.',
-                        value: AppThemeController.instance.isDark,
-                        onChanged: (enabled) async {
-                          final saved = await AppThemeController.instance
-                              .setDark(enabled);
-                          if (!saved && context.mounted) {
-                            ShadToaster.of(context).show(
-                              const ShadToast.destructive(
-                                description: Text(
-                                  'Could not save your appearance setting.',
+                      KeyedSubtree(
+                        key: _darkSwitchKey,
+                        child: _buildSettingRow(
+                          icon: AppThemeController.instance.isDark
+                              ? LucideIcons.moon
+                              : LucideIcons.sun,
+                          title: 'Dark mode',
+                          subtitle:
+                              'Use a darker appearance throughout the app.',
+                          value: AppThemeController.instance.isDark,
+                          onChanged: (enabled) async {
+                            final saved = await AppThemeController.instance
+                                .setDark(
+                                  enabled,
+                                  origin: originOf(
+                                    _darkSwitchKey.currentContext ?? context,
+                                  ),
+                                );
+                            if (!saved && context.mounted) {
+                              ShadToaster.of(context).show(
+                                const ShadToast.destructive(
+                                  description: Text(
+                                    'Could not save your appearance setting.',
+                                  ),
                                 ),
-                              ),
-                            );
-                          }
-                        },
+                              );
+                            }
+                          },
+                        ),
                       ),
                     ],
                   ),
