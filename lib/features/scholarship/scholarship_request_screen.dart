@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:pushtrial/widgets/service_status_page.dart';
-import 'package:pushtrial/widgets/ui/ui.dart';
+import 'package:pushtrial/shared/widgets/service_status_page.dart';
+import 'package:pushtrial/shared/widgets/ui/ui.dart';
 
 class ScholarshipRequestScreen extends StatelessWidget {
   const ScholarshipRequestScreen({super.key});
