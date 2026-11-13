@@ -1,5 +1,5 @@
 import 'package:http/http.dart' as raw;
-import 'package:pushtrial/api/auth_token.dart';
+import 'package:pushtrial/core/api/auth_token.dart';
 
 export 'package:http/http.dart' show Response, StreamedResponse, MultipartFile;
 

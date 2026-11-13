@@ -305,9 +305,9 @@
 //   }
 // }
 
-import 'package:pushtrial/api/authed_http.dart' as http;
-import 'package:pushtrial/api/auth_token.dart';
-import 'package:pushtrial/api/api_version.dart';
+import 'package:pushtrial/core/api/authed_http.dart' as http;
+import 'package:pushtrial/core/api/auth_token.dart';
+import 'package:pushtrial/core/api/api_version.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
 import 'package:dio/dio.dart';

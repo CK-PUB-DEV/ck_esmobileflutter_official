@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pushtrial/api/api.dart';
-import 'package:pushtrial/api/api_version.dart';
+import 'package:pushtrial/core/api/api.dart';
+import 'package:pushtrial/core/api/api_version.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// A stand-in school server. It answers /api/mobile/v2/ping like an updated server, or with 404 like

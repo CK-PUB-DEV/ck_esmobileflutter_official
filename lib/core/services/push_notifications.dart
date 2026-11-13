@@ -2,7 +2,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:pushtrial/main.dart';
-import 'package:pushtrial/api/api.dart';
+import 'package:pushtrial/core/api/api.dart';
 import 'package:pushtrial/models/user_data.dart';
 import 'package:pushtrial/models/user_login.dart';
 import 'package:pushtrial/models/login.dart';

@@ -4,13 +4,13 @@ import 'dart:convert';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
-import 'package:pushtrial/api/api.dart';
-import 'package:pushtrial/config/app_config.dart';
+import 'package:pushtrial/core/api/api.dart';
+import 'package:pushtrial/core/config/app_config.dart';
 import 'package:pushtrial/firebase_options.dart';
 import 'package:pushtrial/main.dart' show navigatorKey, showNotification;
 import 'package:pushtrial/models/login.dart';
 import 'package:pushtrial/models/user.dart';
-import 'package:pushtrial/push_notifications.dart';
+import 'package:pushtrial/core/services/push_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Firebase push, used only where it is still needed.

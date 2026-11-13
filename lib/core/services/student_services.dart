@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:pushtrial/api/api.dart';
+import 'package:pushtrial/core/api/api.dart';
 
 /// Whether one student service (teacher evaluation, clearance, scholarship) can be used at the
 /// selected school, as its v2 server reports it.

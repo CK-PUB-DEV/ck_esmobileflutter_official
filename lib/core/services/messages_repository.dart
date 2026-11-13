@@ -1,7 +1,7 @@
 import 'dart:convert';
 
-import 'package:pushtrial/api/api.dart';
-import 'package:pushtrial/api/api_version.dart';
+import 'package:pushtrial/core/api/api.dart';
+import 'package:pushtrial/core/api/api_version.dart';
 import 'package:pushtrial/models/school_message.dart';
 
 /// Loads what the Notifications page and the Home bell show, from whichever server the school has.

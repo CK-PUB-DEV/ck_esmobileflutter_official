@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pushtrial/api/auth_token.dart';
+import 'package:pushtrial/core/api/auth_token.dart';
 
 void main() {
   group('which requests carry the sign-in token', () {

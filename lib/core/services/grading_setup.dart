@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:pushtrial/api/api.dart';
+import 'package:pushtrial/core/api/api.dart';
 
 /// One grading period of a school: "1st quarter", "Second Term", "Prelim"...
 class GradingPeriod {
