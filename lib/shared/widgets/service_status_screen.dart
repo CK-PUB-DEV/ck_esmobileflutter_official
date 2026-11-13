@@ -5,8 +5,8 @@ import 'package:pushtrial/shared/widgets/ui/ui.dart';
 /// Page for a student service the app can't show yet. Says which case it is, as the school's
 /// server reports it: the school doesn't use it, or it uses it on the portal and it is coming
 /// to the app.
-class ServiceStatusPage extends StatelessWidget {
-  const ServiceStatusPage({
+class ServiceStatusScreen extends StatelessWidget {
+  const ServiceStatusScreen({
     super.key,
     required this.title,
     required this.serviceKey,

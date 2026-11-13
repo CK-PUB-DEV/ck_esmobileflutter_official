@@ -304,7 +304,7 @@ class _LoginState extends State<LoginScreen> {
         ),
       ),
       child: CustomPaint(
-        painter: _HeaderDecorPainter(onHeader.withValues(alpha: 0.10)),
+        painter: HeaderDecorPainter(onHeader.withValues(alpha: 0.10)),
         child: Padding(
           padding: EdgeInsets.fromLTRB(
             Gap.lg,
@@ -683,23 +683,4 @@ class _LoginState extends State<LoginScreen> {
       ),
     );
   }
-}
-
-/// Soft overlapping circles on the header, in the spirit of the blob shapes used by
-/// school portals; purely decorative.
-class _HeaderDecorPainter extends CustomPainter {
-  const _HeaderDecorPainter(this.color);
-
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = color;
-    canvas.drawCircle(Offset(size.width * 0.92, size.height * 0.10), 90, paint);
-    canvas.drawCircle(Offset(size.width * 0.02, size.height * 0.38), 60, paint);
-    canvas.drawCircle(Offset(size.width * 0.80, size.height * 0.88), 46, paint);
-  }
-
-  @override
-  bool shouldRepaint(_HeaderDecorPainter oldDelegate) => oldDelegate.color != color;
 }

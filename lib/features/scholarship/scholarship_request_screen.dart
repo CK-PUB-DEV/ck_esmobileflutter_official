@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:pushtrial/shared/widgets/service_status_page.dart';
+import 'package:pushtrial/shared/widgets/service_status_screen.dart';
 import 'package:pushtrial/shared/widgets/ui/ui.dart';
 
 class ScholarshipRequestScreen extends StatelessWidget {
@@ -7,7 +7,7 @@ class ScholarshipRequestScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const ServiceStatusPage(
+    return const ServiceStatusScreen(
       title: 'Scholarship request',
       serviceKey: 'scholarship',
       featureName: 'scholarship requests',

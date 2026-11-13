@@ -2,7 +2,7 @@ import 'package:pushtrial/core/api/api_version.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pushtrial/models/user.dart';
-import 'package:pushtrial/shared/widgets/carousel_card.dart';
+import 'package:pushtrial/features/home/widgets/carousel_card.dart';
 import 'package:pushtrial/core/services/message_read_store.dart';
 import 'package:pushtrial/core/services/messages_repository.dart';
 import 'package:pushtrial/models/user_data.dart';

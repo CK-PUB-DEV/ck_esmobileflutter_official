@@ -10,4 +10,5 @@ export 'package:pushtrial/shared/widgets/ui/app_spacing.dart';
 export 'package:pushtrial/shared/widgets/ui/app_states.dart';
 export 'package:pushtrial/shared/widgets/ui/app_widgets.dart';
 export 'package:pushtrial/shared/widgets/ui/essentiel_mark.dart';
+export 'package:pushtrial/shared/widgets/ui/header_decor.dart';
 export 'package:pushtrial/shared/widgets/ui/school_surface.dart';

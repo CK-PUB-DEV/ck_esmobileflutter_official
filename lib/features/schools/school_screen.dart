@@ -185,7 +185,7 @@ class _SchoolScreenState extends State<SchoolScreen> {
         ),
       ),
       child: CustomPaint(
-        painter: const _HeaderDecorPainter(Color(0x1AFFFFFF)),
+        painter: const HeaderDecorPainter(Color(0x1AFFFFFF), circles: HeaderDecorPainter.school),
         child: Padding(
           padding: EdgeInsets.fromLTRB(
             Gap.lg,
@@ -587,22 +587,4 @@ class _SchoolScreenState extends State<SchoolScreen> {
   // A school without a logo of its own shows the Essentiel logo.
   Widget _fallbackLogo() =>
       const Padding(padding: EdgeInsets.all(Gap.xs), child: EssentielEmblem());
-}
-
-/// Soft translucent circles on the header, the same decoration the login screen uses.
-class _HeaderDecorPainter extends CustomPainter {
-  const _HeaderDecorPainter(this.color);
-
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = color;
-    canvas.drawCircle(Offset(size.width * 0.94, size.height * 0.12), 80, paint);
-    canvas.drawCircle(Offset(size.width * 0.04, size.height * 0.46), 54, paint);
-    canvas.drawCircle(Offset(size.width * 0.76, size.height * 0.34), 34, paint);
-  }
-
-  @override
-  bool shouldRepaint(_HeaderDecorPainter oldDelegate) => oldDelegate.color != color;
 }
