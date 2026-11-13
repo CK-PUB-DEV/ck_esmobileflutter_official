@@ -121,37 +121,31 @@ class _TeacherEvaluationScreenState extends State<TeacherEvaluationScreen> {
       title: title,
       onRefresh: () => _load(period: data.period),
       children: [
-        AppCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (data.periods.length > 1)
-                ShadSelect<int>(
-                  initialValue: data.periods.indexWhere((p) => p.same(data.period!)),
-                  minWidth: double.infinity,
-                  options: [
-                    for (var i = 0; i < data.periods.length; i++)
-                      ShadOption(value: i, child: Text(data.periods[i].label)),
-                  ],
-                  selectedOptionBuilder: (context, i) => Text(data.periods[i].label),
-                  onChanged: (i) {
-                    if (i != null && !data.periods[i].same(data.period!)) _load(period: data.periods[i]);
-                  },
-                )
-              else
-                Text(data.period?.label ?? '', style: theme.textTheme.large),
-              Gap.hMd,
-              Text(
-                total == 0 ? 'No classes this term' : '${data.done} of $total classes evaluated',
-                style: theme.textTheme.muted,
-              ),
-              if (total > 0) ...[
-                Gap.hSm,
-                ShadProgress(value: data.done / total),
-              ],
-            ],
-          ),
+        // Progress: the one thing the page is for.
+        HeroCard(
+          label: 'Teacher evaluation',
+          icon: LucideIcons.clipboardList,
+          value: total == 0 ? 'No classes' : '${data.done} of $total',
+          captions: [total == 0 ? 'Nothing to evaluate this term' : 'classes evaluated'],
+          pill: data.period?.label,
+          progress: total == 0 ? null : data.done / total,
         ),
+        if (data.periods.length > 1)
+          Padding(
+            padding: const EdgeInsets.only(bottom: Gap.md),
+            child: ShadSelect<int>(
+              initialValue: data.periods.indexWhere((p) => p.same(data.period!)),
+              minWidth: double.infinity,
+              options: [
+                for (var i = 0; i < data.periods.length; i++)
+                  ShadOption(value: i, child: Text(data.periods[i].label)),
+              ],
+              selectedOptionBuilder: (context, i) => Text(data.periods[i].label),
+              onChanged: (i) {
+                if (i != null && !data.periods[i].same(data.period!)) _load(period: data.periods[i]);
+              },
+            ),
+          ),
         if (!data.canSubmit)
           AppCard(
             child: Row(
@@ -177,24 +171,14 @@ class _TeacherEvaluationScreenState extends State<TeacherEvaluationScreen> {
             ),
           ),
         for (final item in data.classes)
-          AppCard(
+          ListRow(
+            margin: const EdgeInsets.only(bottom: Gap.md),
+            title: item.subject,
+            subtitle: [item.subjectCode, if (item.teacher.isNotEmpty) item.teacher].join(' · '),
             onTap: !item.submitted && data.canSubmit ? () => _open(item) : null,
-            child: Row(
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(item.subject, style: theme.textTheme.p.copyWith(fontWeight: FontWeight.w600)),
-                      Gap.hXs,
-                      Text(
-                        [item.subjectCode, if (item.teacher.isNotEmpty) item.teacher].join(' · '),
-                        style: theme.textTheme.muted,
-                      ),
-                    ],
-                  ),
-                ),
-                Gap.wSm,
                 item.submitted
                     ? const StatusBadge('Done', status: AppStatus.success)
                     : const StatusBadge('To do', status: AppStatus.warning),

@@ -197,7 +197,11 @@ class _TapHistoryScreenState extends State<TapHistoryScreen> {
             ],
           ),
           Gap.hLg,
-          Text(Fmt.time(last.ttime), style: text.h1.copyWith(color: onSolid)),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(Fmt.time(last.ttime), style: text.h1.copyWith(color: onSolid)),
+          ),
           Gap.hXs,
           Text(
             Fmt.date(last.tdate),

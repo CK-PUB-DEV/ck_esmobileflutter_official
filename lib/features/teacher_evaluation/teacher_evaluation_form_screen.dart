@@ -117,82 +117,81 @@ class _TeacherEvaluationFormScreenState extends State<TeacherEvaluationFormScree
     final answered = _scores.length;
     final total = widget.form.questions.length;
 
-    return Scaffold(
-      backgroundColor: theme.colorScheme.background,
-      appBar: AppBar(
-        title: const Text('Evaluate teacher'),
-        centerTitle: false,
-        shape: Border(bottom: BorderSide(color: theme.colorScheme.border)),
-      ),
-      body: SafeArea(
-        top: false,
-        child: Column(
-          children: [
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(Gap.lg, Gap.sm, Gap.lg, Gap.xl),
-                children: [
+    // Same header as every other inner screen. The submit bar is part of the body, which
+    // AppPage keeps clear of the system navigation bar.
+    return AppPage(
+      title: 'Evaluate teacher',
+      body: Column(
+        children: [
+          Expanded(
+            child: ListView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: const EdgeInsets.fromLTRB(Gap.lg, Gap.sm, Gap.lg, Gap.xl),
+              children: [
+                HeroCard(
+                  label: widget.period.label,
+                  icon: LucideIcons.userRound,
+                  value: widget.item.teacher.isEmpty ? 'Teacher' : widget.item.teacher,
+                  captions: ['${widget.item.subjectCode} · ${widget.item.subject}'],
+                ),
+                AppCard(
+                  title: 'Department',
+                  child: ShadInput(controller: _department, placeholder: const Text('e.g. CELA')),
+                ),
+                _ScaleGuide(scale: widget.form.scale),
+                SectionHeader(widget.form.intro.isEmpty ? 'Questions' : widget.form.intro),
+                for (final q in widget.form.questions)
+                  _QuestionCard(
+                    question: q,
+                    scale: widget.form.scale,
+                    value: _scores[q.no],
+                    missing: _showMissing && !_scores.containsKey(q.no),
+                    onChanged: (v) => setState(() => _scores[q.no] = v),
+                  ),
+                const SectionHeader('Comments'),
+                for (final c in widget.form.comments)
                   AppCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(widget.item.teacher.isEmpty ? 'Teacher' : widget.item.teacher, style: theme.textTheme.large),
-                        Gap.hXs,
-                        Text('${widget.item.subjectCode} · ${widget.item.subject}', style: theme.textTheme.muted),
-                        Gap.hXs,
-                        Text(widget.period.label, style: theme.textTheme.muted),
-                      ],
+                    title: c.label,
+                    child: ShadInput(
+                      controller: _comments[c.key],
+                      minLines: 3,
+                      maxLines: 6,
+                      placeholder: const Text('Write your answer'),
                     ),
                   ),
-                  AppCard(
-                    title: 'Department',
-                    child: ShadInput(controller: _department, placeholder: const Text('e.g. CELA')),
-                  ),
-                  _ScaleGuide(scale: widget.form.scale),
-                  SectionHeader(widget.form.intro.isEmpty ? 'Questions' : widget.form.intro),
-                  for (final q in widget.form.questions)
-                    _QuestionCard(
-                      question: q,
-                      scale: widget.form.scale,
-                      value: _scores[q.no],
-                      missing: _showMissing && !_scores.containsKey(q.no),
-                      onChanged: (v) => setState(() => _scores[q.no] = v),
-                    ),
-                  const SectionHeader('Comments'),
-                  for (final c in widget.form.comments)
-                    AppCard(
-                      title: c.label,
-                      child: ShadInput(
-                        controller: _comments[c.key],
-                        minLines: 3,
-                        maxLines: 6,
-                        placeholder: const Text('Write your answer'),
-                      ),
-                    ),
-                ],
-              ),
+              ],
             ),
-            Container(
-              padding: const EdgeInsets.fromLTRB(Gap.lg, Gap.md, Gap.lg, Gap.md),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.background,
-                border: Border(top: BorderSide(color: theme.colorScheme.border)),
-              ),
-              child: Row(
-                children: [
-                  Expanded(child: Text('$answered of $total answered', style: theme.textTheme.muted)),
-                  ShadButton(
-                    onPressed: _sending ? null : _submit,
-                    leading: _sending
-                        ? const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Icon(LucideIcons.send, size: IconSize.inline),
-                    child: const Text('Submit'),
-                  ),
-                ],
-              ),
+          ),
+          Container(
+            padding: const EdgeInsets.fromLTRB(Gap.lg, Gap.md, Gap.lg, Gap.md),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.card,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.row)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.07),
+                  blurRadius: 12,
+                  offset: const Offset(0, -3),
+                ),
+              ],
             ),
-          ],
-        ),
+            child: Row(
+              children: [
+                Expanded(child: Text('$answered of $total answered', style: theme.textTheme.muted)),
+                Gap.wMd,
+                ShadButton(
+                  height: kTapTarget,
+                  decoration: appPillDecoration(),
+                  onPressed: _sending ? null : _submit,
+                  leading: _sending
+                      ? const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(LucideIcons.send, size: IconSize.inline),
+                  child: const Text('Submit'),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -262,19 +261,19 @@ class _QuestionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
+    final tone = SchoolTone.current(context);
     final chosen = scale.where((s) => s.score == value).firstOrNull;
     return Padding(
       padding: const EdgeInsets.only(bottom: Gap.md),
+      // Still unanswered after a submit attempt: a red ring around the whole card.
       child: DecoratedBox(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: missing ? theme.colorScheme.destructive : theme.colorScheme.border,
-            width: missing ? 1.5 : 1,
-          ),
-          color: theme.colorScheme.card,
+          borderRadius: BorderRadius.circular(AppRadius.row),
+          border: missing ? Border.all(color: theme.colorScheme.destructive, width: 1.5) : null,
         ),
-        child: Padding(
+        child: RoundedCard(
+          radius: AppRadius.row,
+          margin: EdgeInsets.zero,
           padding: Gap.card,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -285,23 +284,37 @@ class _QuestionCard extends StatelessWidget {
                 children: [
                   for (final s in scale) ...[
                     Expanded(
-                      child: s.score == value
-                          ? ShadButton(
-                              size: ShadButtonSize.sm,
-                              onPressed: () => onChanged(s.score),
-                              child: Text('${s.score}'),
-                            )
-                          : ShadButton.outline(
-                              size: ShadButtonSize.sm,
-                              onPressed: () => onChanged(s.score),
-                              child: Text('${s.score}'),
+                      child: Semantics(
+                        button: true,
+                        selected: s.score == value,
+                        label: 'Score ${s.score}, ${s.label}',
+                        excludeSemantics: true,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: () => onChanged(s.score),
+                          child: Container(
+                            height: kTapTarget,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(16),
+                              color: s.score == value ? tone.solid : theme.colorScheme.muted,
                             ),
+                            child: Text(
+                              '${s.score}',
+                              style: theme.textTheme.p.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: s.score == value ? tone.onSolid : theme.colorScheme.foreground,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
                     if (s != scale.last) Gap.wXs,
                   ],
                 ],
               ),
-              Gap.hXs,
+              Gap.hSm,
               Text(
                 chosen?.label ?? (missing ? 'Choose a score' : '5 = ${scale.first.label}, 1 = ${scale.last.label}'),
                 style: missing && chosen == null
