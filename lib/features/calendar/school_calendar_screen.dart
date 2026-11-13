@@ -291,16 +291,23 @@ class _SchoolCalendarState extends State<SchoolCalendar> {
             ),
             child: Column(
               children: [
-                Text(
-                  hasDate ? '${start.day}' : '-',
-                  style: text.h3.copyWith(color: tone.onSolid, height: 1.1),
+                // Scales down instead of overflowing the 56px block at large text sizes.
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    hasDate ? '${start.day}' : '-',
+                    style: text.h3.copyWith(color: tone.onSolid, height: 1.1),
+                  ),
                 ),
-                Text(
-                  hasDate ? DateFormat('MMM').format(start).toUpperCase() : '',
-                  style: text.small.copyWith(
-                    color: tone.onSolid.withValues(alpha: 0.85),
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    hasDate ? DateFormat('MMM').format(start).toUpperCase() : '',
+                    style: text.small.copyWith(
+                      color: tone.onSolid.withValues(alpha: 0.85),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
               ],

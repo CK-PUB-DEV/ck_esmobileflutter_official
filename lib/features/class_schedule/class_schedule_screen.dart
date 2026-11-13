@@ -397,15 +397,23 @@ class _ClassScheduleScreenState extends State<ClassScheduleScreen> {
     }
   }
 
-  /// School colour for small icon accents; falls back to the theme primary until it loads
-  /// (and lightens in dark mode so it stays readable).
-  Color _accent(BuildContext context) {
-    final theme = ShadTheme.of(context);
-    if (schoolColor.a == 0) return theme.colorScheme.primary;
-    return Theme.of(context).brightness == Brightness.dark
-        ? Color.lerp(schoolColor, Colors.white, 0.4)!
-        : schoolColor;
+  /// Small icons stay neutral: the school colour is used on backgrounds only.
+  Color _accent(BuildContext context) => ShadTheme.of(context).colorScheme.mutedForeground;
+
+  /// "SY 2025-2026 · 1st Semester" for the hero card.
+  String? _heroPill(bool showSem) {
+    final year = schoolYear.where((y) => y.id.toString() == selectedYear).map((y) => y.sydesc).firstOrNull;
+    if (year == null) return null;
+    final sem = showSem
+        ? schoolSem.where((x) => x.id.toString() == selectedSem).map((x) => x.semester).firstOrNull
+        : null;
+    return sem == null ? 'SY $year' : 'SY $year · $sem';
   }
+
+  /// How many different classes the week holds (the same row repeated is counted once).
+  int get _classCount => {
+    for (final i in listOfItem2) '${i.month}_${i.subject}_${i.start}_${i.end}_${i.room}_${i.teacher}',
+  }.length;
 
   @override
   Widget build(BuildContext context) {
@@ -418,6 +426,14 @@ class _ClassScheduleScreenState extends State<ClassScheduleScreen> {
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(Gap.lg, Gap.sm, Gap.lg, Gap.xl),
               children: [
+                if (levelid != 0 && listOfItem2.isNotEmpty)
+                  HeroCard(
+                    label: 'Class schedule',
+                    icon: LucideIcons.calendarClock,
+                    value: '${months.length} class day${months.length == 1 ? '' : 's'}',
+                    pill: _heroPill(showSem),
+                    captions: ['$_classCount classes'],
+                  ),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -572,16 +588,34 @@ class _ClassRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = ShadTheme.of(context).textTheme;
+    final tone = SchoolTone.current(context);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(
-          width: 76,
+        // Filled time block: the colour sits on the background, the times on it are white.
+        Container(
+          width: 84,
+          padding: const EdgeInsets.symmetric(vertical: Gap.sm, horizontal: Gap.xs),
+          decoration: BoxDecoration(
+            color: tone.solid,
+            borderRadius: BorderRadius.circular(16),
+          ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(item.start, style: text.small.copyWith(fontWeight: FontWeight.w600)),
-              Text(item.end, style: text.muted),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  item.start,
+                  style: text.small.copyWith(color: tone.onSolid, fontWeight: FontWeight.w700),
+                ),
+              ),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  item.end,
+                  style: text.small.copyWith(color: tone.onSolid.withValues(alpha: 0.8)),
+                ),
+              ),
             ],
           ),
         ),

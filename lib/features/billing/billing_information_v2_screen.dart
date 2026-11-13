@@ -181,12 +181,16 @@ class _BillingInformationV2PageState extends State<BillingInformationV2Page> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        ShadTabs<String>(
-          controller: _tabs,
-          tabs: const [
-            ShadTab(value: _tabCategory, child: Text('By category')),
-            ShadTab(value: _tabMonthly, child: Text('Monthly')),
-          ],
+        ListenableBuilder(
+          listenable: _tabs,
+          builder: (context, _) => PillToggle<String>(
+            value: _tabs.selected ?? _tabCategory,
+            options: const [
+              (value: _tabCategory, label: 'By category'),
+              (value: _tabMonthly, label: 'Monthly'),
+            ],
+            onChanged: _tabs.select,
+          ),
         ),
         Gap.hMd,
         ListenableBuilder(
@@ -257,55 +261,30 @@ class _BillingInformationV2PageState extends State<BillingInformationV2Page> {
 
   Widget _buildSummaryCard() {
     final l = ledger!;
-    final theme = ShadTheme.of(context);
-    final text = theme.textTheme;
     final info = l.studentInfo;
-    return AppCard(
-      margin: const EdgeInsets.only(bottom: Gap.lg),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(LucideIcons.userRound, size: IconSize.row, color: theme.colorScheme.mutedForeground),
-              Gap.wSm,
-              Expanded(
-                child: Text(info.fullname, style: text.large, maxLines: 2, overflow: TextOverflow.ellipsis),
-              ),
-            ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        HeroCard(
+          label: 'Total balance',
+          icon: LucideIcons.wallet,
+          value: Fmt.money(l.grandTotalBalance),
+          margin: EdgeInsets.only(
+            bottom: (l.grandTotalDiscount > 0 || l.grandTotalOverpayment > 0) ? Gap.md : Gap.lg,
           ),
-          Gap.hXs,
-          Text('${info.levelname}  •  ${info.sectionName}', style: text.muted),
-          if (info.granteeDescription.trim().isNotEmpty) Text(info.granteeDescription, style: text.muted),
-          Gap.hLg,
-          Divider(height: 1, color: theme.colorScheme.border),
-          Gap.hLg,
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: StatTile(
-                  label: 'Total balance',
-                  value: Fmt.money(l.grandTotalBalance),
-                  icon: LucideIcons.wallet,
-                  tone: l.grandTotalBalance > 0 ? theme.colorScheme.destructive : null,
-                ),
-              ),
-              Gap.wLg,
-              Expanded(
-                child: StatTile(
-                  label: 'Total paid',
-                  value: Fmt.money(l.grandTotalPaid),
-                  icon: LucideIcons.banknote,
-                ),
-              ),
-            ],
-          ),
-          // Same split as View Account: Total Paid is cash; vouchers/discounts and any
-          // overpayment Finance hasn't applied yet are shown on their own.
-          if (l.grandTotalDiscount > 0 || l.grandTotalOverpayment > 0) ...[
-            Gap.hMd,
-            Wrap(
+          captions: [
+            info.fullname,
+            '${info.levelname}  •  ${info.sectionName}',
+            if (info.granteeDescription.trim().isNotEmpty) info.granteeDescription,
+          ],
+          stats: [(label: 'Total paid', value: Fmt.money(l.grandTotalPaid))],
+        ),
+        // Same split as View Account: Total Paid is cash; vouchers/discounts and any
+        // overpayment Finance hasn't applied yet are shown on their own.
+        if (l.grandTotalDiscount > 0 || l.grandTotalOverpayment > 0)
+          Padding(
+            padding: const EdgeInsets.only(bottom: Gap.lg),
+            child: Wrap(
               spacing: Gap.sm,
               runSpacing: Gap.xs,
               children: [
@@ -315,9 +294,8 @@ class _BillingInformationV2PageState extends State<BillingInformationV2Page> {
                   StatusBadge('Overpayment ${Fmt.money(l.grandTotalOverpayment)}', status: AppStatus.warning),
               ],
             ),
-          ],
-        ],
-      ),
+          ),
+      ],
     );
   }
 
@@ -575,7 +553,7 @@ class _BillingInformationV2PageState extends State<BillingInformationV2Page> {
                 ? theme.colorScheme.destructive.withValues(alpha: 0.5)
                 : theme.colorScheme.border,
           ),
-          borderRadius: theme.radius,
+          borderRadius: BorderRadius.circular(AppRadius.row),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -624,7 +602,7 @@ class _BillingInformationV2PageState extends State<BillingInformationV2Page> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           InkWell(
-            borderRadius: theme.radius,
+            borderRadius: BorderRadius.circular(AppRadius.row),
             onTap: () => setState(() {
               if (!_openMonths.remove(g.label)) _openMonths.add(g.label);
             }),
@@ -701,7 +679,7 @@ class _BillingInformationV2PageState extends State<BillingInformationV2Page> {
         AppCard(
           padding: EdgeInsets.zero,
           child: InkWell(
-            borderRadius: theme.radius,
+            borderRadius: BorderRadius.circular(AppRadius.row),
             onTap: () => setState(() {
               if (!_openMonths.remove(_paidSectionKey)) _openMonths.add(_paidSectionKey);
             }),
