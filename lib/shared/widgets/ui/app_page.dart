@@ -4,6 +4,7 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'package:pushtrial/shared/utils/school_utils.dart';
 import 'package:pushtrial/shared/widgets/ui/app_spacing.dart';
+import 'package:pushtrial/shared/widgets/ui/app_tokens.dart';
 import 'package:pushtrial/shared/widgets/ui/school_surface.dart';
 
 /// Standard page for every feature screen: app bar, safe area, 16px side padding and an
@@ -117,6 +118,7 @@ class _AppPageState extends State<AppPage> {
         widget.body ??
         ListView(
           physics: const AlwaysScrollableScrollPhysics(),
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           padding: resolved.copyWith(
             bottom: resolved.bottom + MediaQuery.paddingOf(context).bottom,
           ),
@@ -129,9 +131,7 @@ class _AppPageState extends State<AppPage> {
     // Same title size on every header, with or without a back button.
     final titleStyle = theme.textTheme.h4.copyWith(color: scheme.foreground);
 
-    final duration = MediaQuery.disableAnimationsOf(context)
-        ? Duration.zero
-        : const Duration(milliseconds: 160);
+    final duration = AppMotion.of(context);
 
     // The row never changes while scrolling, so it is built once and handed to the builder.
     final headerRow = Padding(
@@ -147,7 +147,7 @@ class _AppPageState extends State<AppPage> {
                 children: [
                   if (showBack) ...[
                     _BackButton(onTap: () => Navigator.maybePop(context)),
-                    Gap.wMd,
+                    Gap.wSm,
                   ],
                   Expanded(
                     child: Text(
@@ -179,18 +179,10 @@ class _AppPageState extends State<AppPage> {
           decoration: BoxDecoration(
             color: lifted ? scheme.card : bg,
             borderRadius: BorderRadius.vertical(
-              bottom: Radius.circular(lifted ? 22 : 0),
+              bottom: Radius.circular(lifted ? AppRadius.header : 0),
             ),
             boxShadow: lifted
-                ? [
-                    BoxShadow(
-                      color: Colors.black.withValues(
-                        alpha: isDark ? 0.40 : 0.07,
-                      ),
-                      blurRadius: 10,
-                      offset: const Offset(0, 3),
-                    ),
-                  ]
+                ? AppShadow.lifted(isDark)
                 : const [],
           ),
           child: child,
@@ -246,18 +238,28 @@ class _BackButton extends StatelessWidget {
       button: true,
       label: MaterialLocalizations.of(context).backButtonTooltip,
       excludeSemantics: true,
-      child: SizedBox(
-        width: kMinTap,
-        height: kMinTap,
-        child: RoundedCard(
-          radius: 999,
-          margin: EdgeInsets.zero,
-          padding: EdgeInsets.zero,
-          onTap: onTap,
-          child: Icon(
-            LucideIcons.chevronLeft,
-            size: 24,
-            color: ShadTheme.of(context).colorScheme.foreground,
+      // The circle stays 44px; the tappable area around it is 48px.
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: SizedBox(
+          width: kTapTarget,
+          height: kTapTarget,
+          child: Center(
+            child: SizedBox(
+              width: kMinTap,
+              height: kMinTap,
+              child: RoundedCard(
+                radius: AppRadius.pill,
+                margin: EdgeInsets.zero,
+                padding: EdgeInsets.zero,
+                child: Icon(
+                  LucideIcons.chevronLeft,
+                  size: 24,
+                  color: ShadTheme.of(context).colorScheme.foreground,
+                ),
+              ),
+            ),
           ),
         ),
       ),

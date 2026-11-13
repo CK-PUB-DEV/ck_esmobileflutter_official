@@ -2,6 +2,28 @@ import 'package:flutter/material.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'package:pushtrial/shared/widgets/ui/app_spacing.dart';
+import 'package:pushtrial/shared/widgets/ui/app_tokens.dart';
+
+/// Round icon well shared by the empty and error states.
+class _IconWell extends StatelessWidget {
+  const _IconWell({required this.icon, required this.color});
+
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 72,
+      height: 72,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: ShadTheme.of(context).colorScheme.muted,
+      ),
+      child: Icon(icon, size: 32, color: color),
+    );
+  }
+}
 
 /// Centered message for "nothing here yet".
 class EmptyState extends StatelessWidget {
@@ -25,8 +47,8 @@ class EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 40, color: theme.colorScheme.mutedForeground),
-            Gap.hMd,
+            _IconWell(icon: icon, color: theme.colorScheme.mutedForeground),
+            Gap.hLg,
             Text(title, style: theme.textTheme.large, textAlign: TextAlign.center),
             if (message != null) ...[
               Gap.hXs,
@@ -61,8 +83,8 @@ class ErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.circleAlert, size: 40, color: theme.colorScheme.destructive),
-            Gap.hMd,
+            _IconWell(icon: LucideIcons.circleAlert, color: theme.colorScheme.destructive),
+            Gap.hLg,
             Text(title, style: theme.textTheme.large, textAlign: TextAlign.center),
             Gap.hXs,
             Text(message, style: theme.textTheme.muted, textAlign: TextAlign.center),
@@ -96,8 +118,20 @@ class SkeletonBox extends StatefulWidget {
 class _SkeletonBoxState extends State<SkeletonBox> with SingleTickerProviderStateMixin {
   late final AnimationController _c = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 1100),
-  )..repeat(reverse: true);
+    duration: AppMotion.pulse,
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Reduced motion: a still placeholder instead of a pulse.
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _c.stop();
+      _c.value = 1;
+    } else if (!_c.isAnimating) {
+      _c.repeat(reverse: true);
+    }
+  }
 
   @override
   void dispose() {
@@ -140,7 +174,7 @@ class LoadingSkeleton extends StatelessWidget {
         const SkeletonBox(height: 24, width: 160),
         Gap.hLg,
         for (var i = 0; i < cards; i++) ...[
-          const SkeletonBox(height: 96, radius: 12),
+          const SkeletonBox(height: 96, radius: AppRadius.row),
           Gap.hMd,
         ],
       ],
