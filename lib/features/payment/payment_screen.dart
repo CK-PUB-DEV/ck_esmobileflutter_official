@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
-import 'payment_form.dart';
+import 'package:pushtrial/features/payment/payment_form_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:pushtrial/models/transactions.dart';
-import 'package:pushtrial/api/api.dart';
+import 'package:pushtrial/core/api/api.dart';
 import 'package:pushtrial/models/user.dart';
 import 'package:pushtrial/models/user_data.dart';
 import 'package:pushtrial/models/onlinepayments.dart';
 import 'package:pushtrial/models/school_info.dart';
 import 'package:pushtrial/models/year_sem.dart';
-import 'package:pushtrial/widgets/ui/ui.dart';
+import 'package:pushtrial/shared/widgets/ui/ui.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 class PaymentPage extends StatefulWidget {
