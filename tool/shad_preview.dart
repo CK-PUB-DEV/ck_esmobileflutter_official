@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:pushtrial/config/theme_controller.dart';
-import 'package:pushtrial/auth/login.dart';
+import 'package:pushtrial/core/config/theme_controller.dart';
+import 'package:pushtrial/features/auth/login_screen.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 Future<void> main() async {
