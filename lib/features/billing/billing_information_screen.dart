@@ -31,6 +31,8 @@ class BillingInformationState extends State<BillingInformationPage> {
   String totalBalance = 'Php 0.00';
   String totalPayment = 'Php 100.00';
   bool loading = true;
+  // Set when the ledger could not be loaded, so the page can offer Retry instead of looking empty.
+  bool _failed = false;
   List<SchoolYear> schoolYear = [];
   List<Sem> schoolSem = [];
   List<EnrolledStud> enrolledstud = [];
@@ -109,6 +111,19 @@ class BillingInformationState extends State<BillingInformationPage> {
     final theme = ShadTheme.of(context);
     final text = theme.textTheme;
     final showSem = levelid == 14 || levelid == 15 || levelid >= 17;
+    // "SY 2025-2026 · 1st Semester": the same year and semester the page used to print at the right.
+    String? heroPill;
+    if (selectedYear.isNotEmpty && selectedSem.isNotEmpty && schoolYear.isNotEmpty) {
+      final year = schoolYear
+          .firstWhere((y) => y.id.toString() == selectedYear, orElse: () => schoolYear.first)
+          .sydesc;
+      final sem = levelid > 13 && schoolSem.isNotEmpty
+          ? schoolSem
+                .firstWhere((s) => s.id.toString() == selectedSem, orElse: () => schoolSem.first)
+                .semester
+          : null;
+      heroPill = sem == null ? 'SY $year' : 'SY $year · $sem';
+    }
 
     return AppPage(
       title: 'Billing information',
@@ -167,41 +182,13 @@ class BillingInformationState extends State<BillingInformationPage> {
           ],
         ),
         Gap.hLg,
-        AppCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: StatTile(
-                      label: 'Total balance',
-                      value: _totalText(totalBalance),
-                      icon: LucideIcons.wallet,
-                    ),
-                  ),
-                  if (selectedYear.isNotEmpty && selectedSem.isNotEmpty)
-                    Flexible(
-                      child: Text(
-                        "SY: ${schoolYear.isNotEmpty ? schoolYear.firstWhere((year) => year.id.toString() == selectedYear, orElse: () => schoolYear.first).sydesc : ''}"
-                        "${levelid > 13 && schoolSem.isNotEmpty ? "\nSem: ${schoolSem.firstWhere((sem) => sem.id.toString() == selectedSem, orElse: () => schoolSem.first).semester}" : ""}",
-                        textAlign: TextAlign.end,
-                        style: text.muted,
-                      ),
-                    ),
-                ],
-              ),
-              Gap.hLg,
-              Divider(height: 1, color: theme.colorScheme.border),
-              Gap.hLg,
-              StatTile(
-                label: 'Payments',
-                value: _totalText(totalPayment),
-                icon: LucideIcons.banknote,
-              ),
-            ],
-          ),
+        HeroCard(
+          label: 'Total balance',
+          icon: LucideIcons.wallet,
+          value: _totalText(totalBalance),
+          pill: heroPill,
+          margin: const EdgeInsets.only(bottom: Gap.lg),
+          stats: [(label: 'Payments', value: _totalText(totalPayment))],
         ),
         if (schoolInfo.isNotEmpty && schoolInfo[0].abbreviation.toUpperCase() == 'SBC')
           Padding(
@@ -221,8 +208,18 @@ class BillingInformationState extends State<BillingInformationPage> {
             ),
           ),
         const SectionHeader('Particulars'),
-        if (data.isEmpty)
-          const EmptyState(title: 'No billing records', message: 'Nothing to show for this school year.')
+        if (data.isEmpty && _failed)
+          ErrorState(
+            title: 'Could not load billing',
+            message: 'Check your connection and try again.',
+            onRetry: getLedger,
+          )
+        else if (data.isEmpty)
+          const EmptyState(
+            icon: LucideIcons.receipt,
+            title: 'No billing records',
+            message: 'Nothing to show for this school year.',
+          )
         else
           AppCard(
             padding: EdgeInsets.zero,
@@ -249,7 +246,8 @@ class BillingInformationState extends State<BillingInformationPage> {
     final amount = _amount(ledger.amount);
     final payment = _amount(ledger.payment);
 
-    return Padding(
+    return Container(
+      color: isTotal ? theme.colorScheme.muted : null,
       padding: const EdgeInsets.symmetric(horizontal: Gap.lg, vertical: Gap.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -378,6 +376,7 @@ class BillingInformationState extends State<BillingInformationPage> {
   }
 
   Future<void> getLedger() async {
+    _failed = false;
     try {
       final response = await CallApi().getStudLedger(id, syid, semid);
 
@@ -386,6 +385,7 @@ class BillingInformationState extends State<BillingInformationPage> {
         print('Error: API returned status ${response.statusCode}');
         setState(() {
           loading = false;
+          _failed = true;
         });
 
         _showError(
@@ -423,6 +423,7 @@ class BillingInformationState extends State<BillingInformationPage> {
       print('Error fetching ledger: $e');
       setState(() {
         loading = false;
+        _failed = true;
       });
 
       // Show error dialog for any exception

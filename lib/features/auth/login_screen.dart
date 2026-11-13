@@ -68,6 +68,9 @@ class _LoginState extends State<LoginScreen> {
       final info = parsedResponse
           .map((model) => SchoolInfo.fromJson(model))
           .toList();
+      // Remembered now so the dashboard opens in the school colour straight after sign-in.
+      final parsed = SchoolUtils.parseColor(info.first.schoolcolor);
+      if (parsed != null) await SchoolUtils.remember(parsed);
       if (!mounted) return;
       setState(() {
         schoolInfo = info;
