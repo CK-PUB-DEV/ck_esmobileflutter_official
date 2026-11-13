@@ -1,9 +1,9 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:pushtrial/api/api.dart';
+import 'package:pushtrial/core/api/api.dart';
 import 'package:pushtrial/models/teacher_evaluation.dart';
-import 'package:pushtrial/widgets/ui/ui.dart';
+import 'package:pushtrial/shared/widgets/ui/ui.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 /// The school's questionnaire for one class: a score for every question, the two comments and

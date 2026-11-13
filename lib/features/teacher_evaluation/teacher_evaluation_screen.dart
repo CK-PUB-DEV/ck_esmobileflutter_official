@@ -1,10 +1,10 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:pushtrial/api/api.dart';
+import 'package:pushtrial/core/api/api.dart';
 import 'package:pushtrial/models/teacher_evaluation.dart';
-import 'package:pushtrial/screens/teacher_evaluation_form.dart';
-import 'package:pushtrial/widgets/ui/ui.dart';
+import 'package:pushtrial/features/teacher_evaluation/teacher_evaluation_form_screen.dart';
+import 'package:pushtrial/shared/widgets/ui/ui.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 /// The student's classes for a term, each with its teacher and whether it was evaluated yet.
