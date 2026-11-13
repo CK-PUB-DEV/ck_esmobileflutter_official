@@ -5,8 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pushtrial/models/user.dart';
 import 'package:pushtrial/models/user_data.dart';
 import 'package:pushtrial/models/taphistory.dart';
-import 'package:pushtrial/api/api.dart';
-import 'package:pushtrial/widgets/ui/ui.dart';
+import 'package:pushtrial/core/api/api.dart';
+import 'package:pushtrial/shared/widgets/ui/ui.dart';
 
 class TapHistoryScreen extends StatefulWidget {
   const TapHistoryScreen({super.key});
