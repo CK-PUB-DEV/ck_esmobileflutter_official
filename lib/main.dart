@@ -9,17 +9,18 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:pushtrial/core/api/auth_token.dart';
 import 'package:pushtrial/core/services/push_notifications.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
-import 'package:pushtrial/features/schools/school_screen.dart';
 import 'package:pushtrial/core/config/app_config.dart';
 import 'package:pushtrial/core/config/theme_controller.dart';
 import 'package:pushtrial/core/services/firebase_push.dart';
 import 'package:pushtrial/core/services/school_alerts.dart';
+import 'package:pushtrial/shared/widgets/ui/ui.dart';
 import 'package:screen_protector/screen_protector.dart';
 import 'package:pushtrial/models/user.dart';
 import 'package:pushtrial/features/auth/login_screen.dart';
 import 'package:pushtrial/features/loading/loading_screen.dart';
 import 'package:pushtrial/features/notifications/notifications_screen.dart';
 import 'package:pushtrial/features/dashboard/dashboard_screen.dart';
+
 // import 'schools/schools.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
@@ -36,20 +37,11 @@ Future<void> _upgradeSavedSchoolToHttps() async {
 }
 
 void showNotification({required String title, required String body}) {
-  showDialog(
-    context: navigatorKey.currentContext!,
-    builder: (context) => AlertDialog(
-      title: Text(title),
-      content: Text(body),
-      actions: [
-        TextButton(
-          onPressed: () {
-            Navigator.pop(context);
-          },
-          child: Text("Ok"),
-        ),
-      ],
-    ),
+  showNoticeSheet(
+    navigatorKey.currentContext!,
+    title: title,
+    message: body,
+    icon: LucideIcons.bell,
   );
 }
 
@@ -81,7 +73,9 @@ Future<void> _sessionEnded() async {
   final context = navigatorKey.currentContext;
   if (context != null && context.mounted) {
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-      const SnackBar(content: Text('Your session ended. Please sign in again.')),
+      const SnackBar(
+        content: Text('Your session ended. Please sign in again.'),
+      ),
     );
   }
 }
@@ -337,7 +331,6 @@ class MyApp extends StatelessWidget {
               }
               return DashboardScreen(user: user);
             },
-            '/schools': (context) => SchoolScreen(),
             '/notifications': (context) => NotificationsScreen(),
           },
         ),
@@ -357,7 +350,11 @@ ShadDecoration _fieldDecoration(ShadColorScheme scheme, bool dark) {
       width: 1,
       radius: pill,
     ),
-    focusedBorder: ShadBorder.all(color: scheme.foreground, width: 1.5, radius: pill),
+    focusedBorder: ShadBorder.all(
+      color: scheme.foreground,
+      width: 1.5,
+      radius: pill,
+    ),
     secondaryFocusedBorder: ShadBorder.all(
       color: scheme.ring.withValues(alpha: 0.25),
       width: 4,
@@ -376,10 +373,11 @@ ShadDecoration _fieldDecoration(ShadColorScheme scheme, bool dark) {
 }
 
 /// Every ShadSelect picks this up; do not restyle dropdowns per screen.
-ShadSelectTheme _selectTheme(ShadColorScheme scheme, bool dark) => ShadSelectTheme(
-  decoration: _fieldDecoration(scheme, dark),
-  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-);
+ShadSelectTheme _selectTheme(ShadColorScheme scheme, bool dark) =>
+    ShadSelectTheme(
+      decoration: _fieldDecoration(scheme, dark),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+    );
 
 /// Every ShadInput / ShadInputFormField picks this up.
 ShadInputTheme _inputTheme(ShadColorScheme scheme, bool dark) => ShadInputTheme(
@@ -420,8 +418,9 @@ class _ThemeSwitchFadeState extends State<_ThemeSwitchFade>
 
   Future<void> _capture() async {
     try {
-      final boundary = _boundaryKey.currentContext?.findRenderObject()
-          as RenderRepaintBoundary?;
+      final boundary =
+          _boundaryKey.currentContext?.findRenderObject()
+              as RenderRepaintBoundary?;
       if (boundary == null || !boundary.hasSize) return;
       final size = boundary.size;
       final origin = AppThemeController.instance.revealOrigin;
@@ -476,7 +475,9 @@ class _ThemeSwitchFadeState extends State<_ThemeSwitchFade>
                     painter: _RevealPainter(
                       image: snapshot,
                       center: _origin,
-                      progress: Curves.easeInOutCubic.transform(_controller.value),
+                      progress: Curves.easeInOutCubic.transform(
+                        _controller.value,
+                      ),
                     ),
                   ),
                 ),
