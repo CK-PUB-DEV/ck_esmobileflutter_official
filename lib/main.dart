@@ -155,8 +155,8 @@ class MyApp extends StatelessWidget {
 
   static ShadThemeData _buildShadTheme(bool dark) {
     final scheme = dark
-        ? const ShadRedColorScheme.dark()
-        : const ShadRedColorScheme.light();
+        ? const ShadNeutralColorScheme.dark()
+        : const ShadNeutralColorScheme.light();
     return ShadThemeData(
       brightness: dark ? Brightness.dark : Brightness.light,
       colorScheme: scheme,
@@ -164,6 +164,36 @@ class MyApp extends StatelessWidget {
       radius: BorderRadius.circular(12),
       selectTheme: _selectTheme(scheme, dark),
       inputTheme: _inputTheme(scheme, dark),
+      // Dropdown lists: a rounded floating card, with a soft gray highlight on the chosen option
+      // instead of the colour fill, so only destructive actions ever read red.
+      popoverTheme: ShadPopoverTheme(
+        decoration: ShadDecoration(
+          color: scheme.card,
+          border: ShadBorder.all(
+            color: dark ? scheme.border : scheme.foreground.withValues(alpha: 0.10),
+            width: 1,
+            radius: BorderRadius.circular(20),
+          ),
+          shadows: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: dark ? 0.5 : 0.14),
+              blurRadius: 24,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+      ),
+      optionTheme: ShadOptionTheme(
+        radius: BorderRadius.circular(14),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        hoveredBackgroundColor: scheme.muted,
+        selectedBackgroundColor: scheme.muted,
+        selectedTextStyle: TextStyle(
+          color: scheme.foreground,
+          fontWeight: FontWeight.w600,
+        ),
+        selectedIconColor: scheme.foreground,
+      ),
     );
   }
 
@@ -338,7 +368,7 @@ class MyApp extends StatelessWidget {
         appBuilder: (context) => MaterialApp(
           debugShowCheckedModeBanner: false,
           navigatorKey: navigatorKey,
-          title: 'Student Portal',
+          title: 'Student portal',
           themeMode: AppThemeController.instance.mode,
           // The Material theme is derived from the shadcn one, which already animates; lerping a
           // second full ThemeData every frame is what made the switch stutter.
