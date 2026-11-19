@@ -4,6 +4,7 @@ library;
 
 export 'package:shadcn_ui/shadcn_ui.dart' show LucideIcons, ShadTheme;
 
+export 'package:pushtrial/shared/widgets/ui/app_confirm_sheet.dart';
 export 'package:pushtrial/shared/widgets/ui/app_formatters.dart';
 export 'package:pushtrial/shared/widgets/ui/app_page.dart';
 export 'package:pushtrial/shared/widgets/ui/app_spacing.dart';

@@ -69,18 +69,15 @@ class _TeacherEvaluationFormScreenState extends State<TeacherEvaluationFormScree
       return;
     }
 
-    final confirmed = await showShadDialog<bool>(
-      context: context,
-      builder: (context) => ShadDialog(
-        title: const Text('Submit evaluation?'),
-        description: const Text('You can’t change it after it is submitted.'),
-        actions: [
-          ShadButton.outline(child: const Text('Cancel'), onPressed: () => Navigator.of(context).pop(false)),
-          ShadButton(child: const Text('Submit'), onPressed: () => Navigator.of(context).pop(true)),
-        ],
-      ),
+    final confirmed = await showConfirmSheet(
+      context,
+      title: 'Submit evaluation?',
+      message: 'You can’t change it after it is submitted.',
+      confirmLabel: 'Submit',
+      cancelLabel: 'Go back',
+      icon: LucideIcons.send,
     );
-    if (confirmed != true || !mounted) return;
+    if (!confirmed || !mounted) return;
 
     setState(() => _sending = true);
     try {
