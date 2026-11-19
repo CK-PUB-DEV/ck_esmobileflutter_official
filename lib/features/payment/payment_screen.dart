@@ -406,7 +406,7 @@ class PaymentPageState extends State<PaymentPage> {
                           Expanded(
                             child: Text(
                               payment.description,
-                              style: text.p.copyWith(fontWeight: FontWeight.w600),
+                              style: text.strong,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -414,7 +414,7 @@ class PaymentPageState extends State<PaymentPage> {
                           Gap.wSm,
                           Text(
                             Fmt.money(double.parse(payment.amount)),
-                            style: text.p.copyWith(fontWeight: FontWeight.w600),
+                            style: text.strong,
                           ),
                         ],
                       ),
@@ -511,7 +511,7 @@ class PaymentPageState extends State<PaymentPage> {
           child: Row(
             children: [
               Expanded(
-                child: Text(entry.key, style: text.p.copyWith(fontWeight: FontWeight.w600)),
+                child: Text(entry.key, style: text.strong),
               ),
               Text(
                 Fmt.money(entry.value.fold<double>(0, (sum, t) => sum + amountOf(t))),
@@ -556,14 +556,14 @@ class PaymentPageState extends State<PaymentPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: text.p.copyWith(fontWeight: FontWeight.w600)),
+                Text(title, style: text.strong),
                 Gap.hXs,
                 Text(details, style: text.muted, maxLines: 1, overflow: TextOverflow.ellipsis),
               ],
             ),
           ),
           Gap.wSm,
-          Text(Fmt.money(amount), style: text.p.copyWith(fontWeight: FontWeight.w600)),
+          Text(Fmt.money(amount), style: text.strong),
         ],
       ),
     );

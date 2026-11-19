@@ -814,7 +814,7 @@ class _SubjectCard extends StatelessWidget {
           if (code.isNotEmpty) Text(code, style: text.muted),
           Text(
             title,
-            style: text.p.copyWith(fontWeight: FontWeight.w600),
+            style: text.strong,
             maxLines: 4,
             overflow: TextOverflow.ellipsis,
           ),
@@ -935,7 +935,7 @@ class _AttendanceRow extends StatelessWidget {
     final text = ShadTheme.of(context).textTheme;
     final style = header
         ? text.muted
-        : (bold ? text.p.copyWith(fontWeight: FontWeight.w600) : text.p);
+        : (bold ? text.strong : text.p);
     Widget cell(String value, int flex, {TextAlign align = TextAlign.end}) => Expanded(
       flex: flex,
       child: Text(value, style: style, textAlign: align, maxLines: 2, overflow: TextOverflow.ellipsis),

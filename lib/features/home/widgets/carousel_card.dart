@@ -278,7 +278,7 @@ class _CarouselCardState extends State<CarouselCard> {
       ),
       child: Text(
         label,
-        style: text.small.copyWith(fontWeight: FontWeight.w600),
+        style: text.smallStrong,
       ),
     );
 
@@ -313,7 +313,7 @@ class _CarouselCardState extends State<CarouselCard> {
               ),
               Gap.hLg,
               if (_balanceLoading)
-                SkeletonBox(height: 36, width: 160)
+                SkeletonBox(height: 32, width: 140)
               else
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
@@ -329,13 +329,18 @@ class _CarouselCardState extends State<CarouselCard> {
                                 ),
                               ),
                             )
-                          : Text(
-                              balanceText,
-                              style: _balanceError == null
-                                  ? text.h1.copyWith(color: onSolid)
-                                  : text.p.copyWith(
-                                      color: onSolid.withValues(alpha: 0.9),
-                                    ),
+                          : FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                balanceText,
+                                maxLines: 1,
+                                style: _balanceError == null
+                                    ? text.h1.copyWith(color: onSolid)
+                                    : text.p.copyWith(
+                                        color: onSolid.withValues(alpha: 0.9),
+                                      ),
+                              ),
                             ),
                     ),
                     if (_balanceError == null)
