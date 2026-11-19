@@ -412,19 +412,13 @@ class _SchoolCalendarState extends State<SchoolCalendar> {
         );
       }).toList();
 
-      showShadDialog(
-        context: context,
-        builder: (BuildContext context) {
-          final text = ShadTheme.of(context).textTheme;
-          return ShadDialog(
-            title: const Text('Event details'),
-            actions: [
-              ShadButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Close'),
-              ),
-            ],
-            child: Padding(
+      final text = ShadTheme.of(context).textTheme;
+      showNoticeSheet(
+        context,
+        title: 'Event details',
+        buttonLabel: 'Close',
+        icon: LucideIcons.calendarDays,
+        child: Padding(
               padding: const EdgeInsets.symmetric(vertical: Gap.md),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -450,8 +444,6 @@ class _SchoolCalendarState extends State<SchoolCalendar> {
                 ],
               ),
             ),
-          );
-        },
       );
     }
   }
