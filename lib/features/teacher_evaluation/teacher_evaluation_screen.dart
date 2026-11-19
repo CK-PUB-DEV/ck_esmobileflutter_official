@@ -5,7 +5,6 @@ import 'package:pushtrial/core/api/api.dart';
 import 'package:pushtrial/models/teacher_evaluation.dart';
 import 'package:pushtrial/features/teacher_evaluation/teacher_evaluation_form_screen.dart';
 import 'package:pushtrial/shared/widgets/ui/ui.dart';
-import 'package:shadcn_ui/shadcn_ui.dart';
 
 /// The student's classes for a term, each with its teacher and whether it was evaluated yet.
 /// Tapping a class that is still to do opens the questionnaire.
@@ -127,23 +126,28 @@ class _TeacherEvaluationScreenState extends State<TeacherEvaluationScreen> {
           icon: LucideIcons.clipboardList,
           value: total == 0 ? 'No classes' : '${data.done} of $total',
           captions: [total == 0 ? 'Nothing to evaluate this term' : 'classes evaluated'],
-          pill: data.period?.label,
           progress: total == 0 ? null : data.done / total,
         ),
         if (data.periods.length > 1)
           Padding(
             padding: const EdgeInsets.only(bottom: Gap.md),
-            child: ShadSelect<int>(
-              initialValue: data.periods.indexWhere((p) => p.same(data.period!)),
-              minWidth: double.infinity,
-              options: [
-                for (var i = 0; i < data.periods.length; i++)
-                  ShadOption(value: i, child: Text(data.periods[i].label)),
-              ],
-              selectedOptionBuilder: (context, i) => Text(data.periods[i].label),
-              onChanged: (i) {
-                if (i != null && !data.periods[i].same(data.period!)) _load(period: data.periods[i]);
-              },
+            child: ContextPill(
+              label: data.period?.label ?? 'Select term',
+              onTap: () => showOptionSheet<int>(
+                context,
+                title: 'Term',
+                subtitle: 'Show evaluations for one term',
+                value: data.periods.indexWhere((p) => p.same(data.period!)),
+                options: [
+                  for (var i = 0; i < data.periods.length; i++)
+                    (value: i, label: data.periods[i].label, hint: null),
+                ],
+                onSelected: (i) {
+                  if (!data.periods[i].same(data.period!)) {
+                    _load(period: data.periods[i]);
+                  }
+                },
+              ),
             ),
           ),
         if (!data.canSubmit)
@@ -173,6 +177,16 @@ class _TeacherEvaluationScreenState extends State<TeacherEvaluationScreen> {
         for (final item in data.classes)
           ListRow(
             margin: const EdgeInsets.only(bottom: Gap.md),
+            leading: Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(color: theme.colorScheme.muted, shape: BoxShape.circle),
+              child: Icon(
+                item.submitted ? LucideIcons.clipboardCheck : LucideIcons.clipboardList,
+                size: IconSize.row,
+                color: theme.colorScheme.mutedForeground,
+              ),
+            ),
             title: item.subject,
             subtitle: [item.subjectCode, if (item.teacher.isNotEmpty) item.teacher].join(' · '),
             onTap: !item.submitted && data.canSubmit ? () => _open(item) : null,

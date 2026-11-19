@@ -13,16 +13,20 @@ class TabNavItem {
 /// Linear blend of [a] and [b]; 0 gives [a], 1 gives [b].
 double _mix(double a, double b, double t) => a + (b - a) * t;
 
-/// The floating bottom navigation: a fully rounded pill that sits clear of the screen edges.
+/// The floating bottom navigation: a white, fully rounded pill that sits clear of the screen edges
+/// (a dark surface in dark mode).
 ///
-/// A screen passes its tabs, the selected index and a callback. The selected tab keeps full-ink
-/// text with a bold label and a soft bubble in [accent] (the school colour) behind its icon;
-/// the others recede to the muted tone. Use it as a Scaffold's `bottomNavigationBar` together
-/// with `extendBody: true`, so the page shows around and behind the pill.
+/// Inactive tabs are icon-only in a muted tone. The selected tab becomes a school-colour capsule that grows
+/// to carry its label, so the bar names where you are without printing four labels. A screen
+/// passes its tabs, the selected index and a callback. Use it as a Scaffold's `bottomNavigationBar`
+/// together with `extendBody: true`, so the page shows around and behind the pill.
 ///
-/// While [collapsed] is true the pill morphs to a small icons-only capsule (labels fold away and
-/// the width shrinks); flipping it back restores the full bar. One controller drives every part
-/// of the morph, so the motion stays in sync and can be reversed mid-way without a jump.
+/// While [collapsed] is true the pill morphs to a small icons-only capsule (the selected label folds
+/// away and the width shrinks); flipping it back restores the full bar. One controller drives the
+/// morph, so the motion stays in sync and can be reversed mid-way without a jump.
+///
+/// The selected capsule takes [accent] (the school colour); its icon and label flip to ink when
+/// that colour is light, so the label stays readable on any school.
 class TabNavigation extends StatefulWidget {
   const TabNavigation({
     super.key,
@@ -46,13 +50,13 @@ class TabNavigation extends StatefulWidget {
 class _TabNavigationState extends State<TabNavigation>
     with SingleTickerProviderStateMixin {
   static const double _maxWidth = 440;
-  static const double _compactItemWidth = 52;
+  static const double _compactItemWidth = 44;
   static const double _padding = Gap.sm;
 
-  // Heights of the pill (item + padding + 1px border on each side). The slot the Scaffold
-  // reserves is always as tall as the full bar, so the morph never changes the page's layout.
-  static const double _fullHeight = 52 + _padding * 2 + 2;
-  static const double _compactHeight = 44 + _padding * 2 + 2;
+  // Heights of the pill (item + padding on each side). The slot the Scaffold reserves is always as
+  // tall as the full bar, so the morph never changes the page's layout.
+  static const double _fullHeight = 52 + _padding * 2;
+  static const double _compactHeight = 44 + _padding * 2;
   static const double _slotHeight = _fullHeight + Gap.sm;
 
   late final AnimationController _morph = AnimationController(
@@ -69,8 +73,8 @@ class _TabNavigationState extends State<TabNavigation>
       widget.collapsed ? 1 : 0,
       duration: reduce
           ? Duration.zero
-          : Duration(milliseconds: widget.collapsed ? 340 : 380),
-      curve: Curves.easeOutCubic,
+          : Duration(milliseconds: widget.collapsed ? 420 : 460),
+      curve: Curves.easeOutQuart,
     );
   }
 
@@ -82,9 +86,9 @@ class _TabNavigationState extends State<TabNavigation>
 
   @override
   Widget build(BuildContext context) {
-    final shad = ShadTheme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final accent = widget.accent ?? shad.primary;
+    final accent = widget.accent ?? ShadTheme.of(context).colorScheme.primary;
+    final palette = _NavPalette.of(isDark, accent);
 
     // The Scaffold sees a fixed-size box, so the morph below only repaints this subtree; the pages
     // behind (extendBody) are neither re-laid out nor rebuilt while it runs.
@@ -106,44 +110,49 @@ class _TabNavigationState extends State<TabNavigation>
                   animation: _morph,
                   builder: (context, _) {
                     final t = _morph.value;
+                    final pillWidth = _mix(fullWidth, compactWidth, t);
+                    // Room left for the selected label once every tab has its icon slot. Passed
+                    // down so the label gets all of it (a Flexible would split it four ways).
+                    final labelRoom = (pillWidth -
+                            _padding * 2 -
+                            widget.items.length * _compactItemWidth -
+                            Gap.md)
+                        .clamp(0.0, double.infinity);
                     return Align(
                       alignment: Alignment.bottomCenter,
                       child: Container(
                         key: const ValueKey('tab_navigation_pill'),
-                        width: _mix(fullWidth, compactWidth, t),
+                        width: pillWidth,
                         height: _mix(_fullHeight, _compactHeight, t),
                         padding: const EdgeInsets.all(_padding),
                         decoration: BoxDecoration(
-                          color: shad.card,
+                          color: palette.pill,
                           borderRadius: BorderRadius.circular(999),
-                          border: Border.all(
-                            color: shad.border.withValues(alpha: isDark ? 0.9 : 0.6),
-                          ),
                           // One offset, soft shadow: cheap to repaint while the pill resizes.
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withValues(alpha: isDark ? 0.45 : 0.12),
-                              blurRadius: 20,
-                              offset: const Offset(0, 6),
+                              color: Colors.black.withValues(alpha: isDark ? 0.5 : 0.14),
+                              blurRadius: 24,
+                              offset: const Offset(0, 8),
                             ),
                           ],
                         ),
                         child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             for (var i = 0; i < widget.items.length; i++)
-                              Expanded(
-                                child: _TabButton(
-                                  item: widget.items[i],
-                                  selected: i == widget.currentIndex,
-                                  accent: accent,
-                                  collapse: t,
-                                  onTap: () {
-                                    if (i != widget.currentIndex) {
-                                      HapticFeedback.selectionClick();
-                                    }
-                                    widget.onChanged(i);
-                                  },
-                                ),
+                              _TabButton(
+                                item: widget.items[i],
+                                selected: i == widget.currentIndex,
+                                palette: palette,
+                                collapse: t,
+                                labelRoom: labelRoom,
+                                onTap: () {
+                                  if (i != widget.currentIndex) {
+                                    HapticFeedback.selectionClick();
+                                  }
+                                  widget.onChanged(i);
+                                },
                               ),
                           ],
                         ),
@@ -160,49 +169,73 @@ class _TabNavigationState extends State<TabNavigation>
   }
 }
 
+/// Colours of the bar: a neutral pill, with the selected capsule in the school colour.
+class _NavPalette {
+  const _NavPalette({
+    required this.pill,
+    required this.idle,
+    required this.capsule,
+    required this.onCapsule,
+  });
+
+  final Color pill;
+  final Color idle;
+  final Color capsule;
+  final Color onCapsule;
+
+  static _NavPalette of(bool isDark, Color accent) {
+    // Same rule as the school-colour cards: a little darker at night, and the text flips to ink
+    // when the school colour is light (yellow) so the label always stays readable.
+    final capsule = isDark ? Color.lerp(accent, Colors.black, 0.28)! : accent;
+    final onCapsule = capsule.computeLuminance() > 0.55
+        ? const Color(0xFF111111)
+        : Colors.white;
+    return _NavPalette(
+      pill: isDark ? const Color(0xFF1F2123) : Colors.white,
+      idle: isDark ? const Color(0xFF9EA5AB) : const Color(0xFF6A7076),
+      capsule: capsule,
+      onCapsule: onCapsule,
+    );
+  }
+}
+
 class _TabButton extends StatelessWidget {
   const _TabButton({
     required this.item,
     required this.selected,
-    required this.accent,
+    required this.palette,
     required this.collapse,
+    required this.labelRoom,
     required this.onTap,
   });
 
   final TabNavItem item;
   final bool selected;
-  final Color accent;
+  final _NavPalette palette;
 
-  /// 0 = full bar (icon + label), 1 = collapsed (icon only).
+  /// Widest the label may be before it ends in an ellipsis.
+  final double labelRoom;
+
+  /// 0 = full bar (selected tab shows its label), 1 = collapsed (icon only).
   final double collapse;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
-    final shad = theme.colorScheme;
     final reduce = MediaQuery.disableAnimationsOf(context);
 
     // The selected/unselected change runs on its own 0..1 value; every size below is then a plain
     // function of (selected, collapse), so nothing animates toward a moving target.
     return TweenAnimationBuilder<double>(
       tween: Tween(end: selected ? 1 : 0),
-      duration: reduce ? Duration.zero : const Duration(milliseconds: 260),
-      curve: Curves.easeOutCubic,
+      duration: reduce ? Duration.zero : const Duration(milliseconds: 340),
+      curve: Curves.easeOutQuart,
       builder: (context, s, _) {
-        final foreground = Color.lerp(shad.mutedForeground, shad.foreground, s)!;
-        final bubbleWidth = _mix(
-          _mix(36, 40, collapse),
-          _mix(52, 46, collapse),
-          s,
-        );
-        final bubbleHeight = _mix(30, 40, collapse);
-        final labelStyle = TextStyle.lerp(
-          theme.textTheme.small.copyWith(fontWeight: FontWeight.w500),
-          theme.textTheme.small.copyWith(fontWeight: FontWeight.w700),
-          s,
-        )!.copyWith(color: foreground, fontSize: AppType.micro, height: 1.1);
-        final labelOpacity = (1 - collapse * 1.6).clamp(0.0, 1.0);
+        final foreground = Color.lerp(palette.idle, palette.onCapsule, s)!;
+        final height = _mix(52, 44, collapse);
+        // How much of the label is revealed: only the selected tab, and not while collapsed.
+        final reveal = s * (1 - collapse);
 
         return Semantics(
           button: true,
@@ -214,44 +247,36 @@ class _TabButton extends StatelessWidget {
             radius: 44,
             highlightShape: BoxShape.rectangle,
             borderRadius: BorderRadius.circular(999),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                minHeight: _mix(kMinTap + 8, kMinTap, collapse),
+            child: Container(
+              height: height,
+              decoration: BoxDecoration(
+                color: palette.capsule.withValues(alpha: s),
+                borderRadius: BorderRadius.circular(999),
               ),
-              child: Column(
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Container(
-                    width: bubbleWidth,
-                    height: bubbleHeight,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: accent.withValues(alpha: 0.16 * s),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Transform.scale(
-                      scale: 1 + 0.08 * s,
-                      child: Icon(item.icon, size: IconSize.nav - 2, color: foreground),
-                    ),
+                  SizedBox(
+                    width: _TabNavigationState._compactItemWidth,
+                    child: Icon(item.icon, size: IconSize.nav - 2, color: foreground),
                   ),
-                  // The label folds away: its height and opacity follow the morph, so the bar
-                  // shrinks smoothly instead of the text popping out.
-                  if (collapse < 1)
+                  if (reveal > 0)
                     ClipRect(
                       child: Align(
-                        alignment: Alignment.topCenter,
-                        heightFactor: 1 - collapse,
+                        alignment: Alignment.centerLeft,
+                        widthFactor: reveal,
                         child: Padding(
-                          padding: const EdgeInsets.only(top: Gap.xs),
-                          child: Text(
-                            item.label,
-                            maxLines: 1,
-                            softWrap: false,
-                            overflow: TextOverflow.clip,
-                            style: labelStyle.copyWith(
-                              color: foreground.withValues(
-                                alpha: foreground.a * labelOpacity,
+                          padding: const EdgeInsets.only(right: Gap.md),
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(maxWidth: labelRoom),
+                            child: Text(
+                              item.label,
+                              maxLines: 1,
+                              softWrap: false,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.smallStrong.copyWith(
+                                color: foreground.withValues(alpha: Curves.easeIn.transform(reveal)),
+                                height: 1.1,
                               ),
                             ),
                           ),
