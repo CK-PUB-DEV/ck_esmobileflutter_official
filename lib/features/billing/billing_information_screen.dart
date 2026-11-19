@@ -29,7 +29,7 @@ class BillingInformationState extends State<BillingInformationPage> {
   String syDesc = '';
   String sem = '';
   String totalBalance = 'Php 0.00';
-  String totalPayment = 'Php 100.00';
+  String totalPayment = 'Php 0.00';
   bool loading = true;
   // Set when the ledger could not be loaded, so the page can offer Retry instead of looking empty.
   bool _failed = false;
@@ -122,65 +122,20 @@ class BillingInformationState extends State<BillingInformationPage> {
     return AppPage(
       title: 'Billing information',
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: ShadSelect<String>(
-                placeholder: const Text('School year'),
-                initialValue: selectedYear.isNotEmpty ? selectedYear : null,
-                options: [
-                  for (final option in schoolYear)
-                    ShadOption(value: option.id.toString(), child: Text(option.sydesc)),
-                ],
-                selectedOptionBuilder: (context, value) => Text(
-                  schoolYear
-                      .firstWhere((y) => y.id.toString() == value, orElse: () => schoolYear.first)
-                      .sydesc,
-                ),
-                onChanged: (value) {
-                  if (value == null) return;
-                  setState(() {
-                    selectedYear = value;
-                    syid = int.parse(selectedYear);
-                  });
-                  if (selectedSem.isNotEmpty) getLedger();
-                },
-              ),
-            ),
-            if (showSem) ...[
-              Gap.wSm,
-              Expanded(
-                child: ShadSelect<String>(
-                  placeholder: const Text('Semester'),
-                  initialValue: selectedSem.isNotEmpty ? selectedSem : null,
-                  options: [
-                    for (final option in schoolSem)
-                      ShadOption(value: option.id.toString(), child: Text(option.semester)),
-                  ],
-                  selectedOptionBuilder: (context, value) => Text(
-                    schoolSem
-                        .firstWhere((s) => s.id.toString() == value, orElse: () => schoolSem.first)
-                        .semester,
-                  ),
-                  onChanged: (value) {
-                    if (value == null) return;
-                    setState(() {
-                      selectedSem = value;
-                      semid = int.parse(selectedSem);
-                    });
-                    if (selectedYear.isNotEmpty) getLedger();
-                  },
-                ),
-              ),
-            ],
-          ],
+        ContextPill(
+          icon: LucideIcons.calendar,
+          label: heroPill ?? 'School year',
+          onTap: () => showPickerSheet(
+            context,
+            title: showSem ? 'School year and semester' : 'School year',
+            child: _buildSelects(showSem),
+          ),
         ),
         Gap.hLg,
         HeroCard(
           label: 'Total balance',
           icon: LucideIcons.wallet,
           value: _totalText(totalBalance),
-          pill: heroPill,
           margin: const EdgeInsets.only(bottom: Gap.lg),
           stats: [(label: 'Payments', value: _totalText(totalPayment))],
         ),
@@ -215,17 +170,60 @@ class BillingInformationState extends State<BillingInformationPage> {
             message: 'Nothing to show for this school year.',
           )
         else
-          AppCard(
-            padding: EdgeInsets.zero,
-            child: Column(
-              children: [
-                for (var i = 0; i < data.length; i++) ...[
-                  if (i > 0) Divider(height: 1, color: theme.colorScheme.border),
-                  _buildLedgerRow(data[i]),
+          Column(children: [for (final row in data) _buildLedgerRow(row)]),
+      ],
+    );
+  }
+
+  Widget _buildSelects(bool showSem) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+            ShadSelect<String>(
+                placeholder: const Text('School year'),
+                initialValue: selectedYear.isNotEmpty ? selectedYear : null,
+                options: [
+                  for (final option in schoolYear)
+                    ShadOption(value: option.id.toString(), child: Text(option.sydesc)),
                 ],
-              ],
-            ),
-          ),
+                selectedOptionBuilder: (context, value) => Text(
+                  schoolYear
+                      .firstWhere((y) => y.id.toString() == value, orElse: () => schoolYear.first)
+                      .sydesc,
+                ),
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() {
+                    selectedYear = value;
+                    syid = int.parse(selectedYear);
+                  });
+                  if (selectedSem.isNotEmpty) getLedger();
+                },
+              ),
+            if (showSem) ...[
+              Gap.hMd,
+                ShadSelect<String>(
+                  placeholder: const Text('Semester'),
+                  initialValue: selectedSem.isNotEmpty ? selectedSem : null,
+                  options: [
+                    for (final option in schoolSem)
+                      ShadOption(value: option.id.toString(), child: Text(option.semester)),
+                  ],
+                  selectedOptionBuilder: (context, value) => Text(
+                    schoolSem
+                        .firstWhere((s) => s.id.toString() == value, orElse: () => schoolSem.first)
+                        .semester,
+                  ),
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() {
+                      selectedSem = value;
+                      semid = int.parse(selectedSem);
+                    });
+                    if (selectedYear.isNotEmpty) getLedger();
+                  },
+                ),
+            ],
       ],
     );
   }
@@ -235,59 +233,20 @@ class BillingInformationState extends State<BillingInformationPage> {
     final text = theme.textTheme;
     final isTotal = ledger.particulars.startsWith('TOTAL:');
     final color = ledger.isVoided ? theme.colorScheme.mutedForeground : theme.colorScheme.foreground;
-    final decoration = ledger.isVoided ? TextDecoration.lineThrough : TextDecoration.none;
-    final weight = isTotal ? FontWeight.w600 : FontWeight.w400;
     final amount = _amount(ledger.amount);
     final payment = _amount(ledger.payment);
 
-    return Container(
-      color: isTotal ? theme.colorScheme.muted : null,
-      padding: const EdgeInsets.symmetric(horizontal: Gap.lg, vertical: Gap.md),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Text(
-                  ledger.particulars,
-                  style: text.small.copyWith(color: color, fontWeight: weight, decoration: decoration),
-                ),
-              ),
-              if (ledger.isVoided) ...[
-                Gap.wSm,
-                const StatusBadge('Void', status: AppStatus.danger),
-              ],
-            ],
-          ),
-          if (amount.isNotEmpty || payment.isNotEmpty) ...[
-            Gap.hXs,
-            Wrap(
-              spacing: Gap.lg,
-              runSpacing: Gap.xs,
-              children: [
-                if (amount.isNotEmpty) _labelValue('Amount', amount, color, weight, decoration),
-                if (payment.isNotEmpty) _labelValue('Payments', payment, color, weight, decoration),
-              ],
-            ),
-          ],
-        ],
-      ),
-    );
-  }
+    final subtitle = [
+      if (amount.isNotEmpty) 'Amount $amount',
+      if (payment.isNotEmpty) 'Payments $payment',
+    ].join('  •  ');
 
-  Widget _labelValue(String label, String value, Color color, FontWeight weight, TextDecoration decoration) {
-    final text = ShadTheme.of(context).textTheme;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text('$label ', style: text.muted),
-        Text(
-          value,
-          style: text.small.copyWith(color: color, fontWeight: weight, decoration: decoration),
-        ),
-      ],
+    return ListRow(
+      title: ledger.particulars,
+      subtitle: subtitle.isEmpty ? null : subtitle,
+      trailing: ledger.isVoided
+          ? const StatusBadge('Void', status: AppStatus.danger)
+          : (isTotal ? Text('TOTAL', style: text.smallStrong.copyWith(color: color)) : null),
     );
   }
 

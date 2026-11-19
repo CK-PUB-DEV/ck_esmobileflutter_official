@@ -457,7 +457,7 @@ class _LoginState extends State<LoginScreen> {
                       SizedBox(
                         width: double.infinity,
                         child: Text(
-                          schoolName.isEmpty ? 'Student Portal' : schoolName,
+                          schoolName.isEmpty ? 'Student portal' : schoolName,
                           textAlign: TextAlign.center,
                           maxLines: compact ? 1 : 2,
                           overflow: TextOverflow.ellipsis,
@@ -490,54 +490,32 @@ class _LoginState extends State<LoginScreen> {
     required ShadColorScheme scheme,
   }) {
     final name = schoolInfo.isEmpty ? '' : schoolInfo.first.schoolname.trim();
-    final shape = BorderRadius.circular(AppRadius.pill);
-    return Semantics(
-      button: true,
-      label: name.isEmpty
+    return ListRow(
+      margin: EdgeInsets.zero,
+      title: name.isEmpty ? 'Select your school' : name,
+      subtitle: name.isEmpty ? null : 'Change school',
+      semanticLabel: name.isEmpty
           ? 'School. Choose your school'
           : 'School: $name. Change school',
-      excludeSemantics: true,
-      child: Material(
-        color: scheme.muted.withValues(alpha: 0.6),
-        borderRadius: shape,
-        child: InkWell(
-          borderRadius: shape,
-          onTap: _chooseSchool,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: kTapTarget + 8),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: Gap.lg,
-                vertical: Gap.sm,
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    LucideIcons.school,
-                    size: IconSize.row,
-                    color: scheme.mutedForeground,
-                  ),
-                  Gap.wMd,
-                  Expanded(
-                    child: Text(
-                      name.isEmpty ? 'Select your school' : 'Change school',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: text.p.copyWith(color: scheme.mutedForeground),
-                    ),
-                  ),
-                  Gap.wSm,
-                  Icon(
-                    LucideIcons.chevronsUpDown,
-                    size: IconSize.inline,
-                    color: scheme.mutedForeground,
-                  ),
-                ],
-              ),
-            ),
-          ),
+      leading: Container(
+        width: 44,
+        height: 44,
+        padding: const EdgeInsets.all(Gap.xs + 2),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          shape: BoxShape.circle,
+          border: Border.all(color: scheme.border),
+        ),
+        child: ClipOval(
+          child: name.isEmpty ? const EssentielEmblem() : _buildSchoolLogo(),
         ),
       ),
+      trailing: Icon(
+        LucideIcons.chevronRight,
+        size: IconSize.inline,
+        color: scheme.mutedForeground,
+      ),
+      onTap: _chooseSchool,
     );
   }
 
@@ -607,6 +585,7 @@ class _LoginState extends State<LoginScreen> {
                             width: kTapTarget,
                             height: kTapTarget,
                             padding: EdgeInsets.zero,
+                            decoration: appPillDecoration(),
                             onPressed: _togglePasswordVisibility,
                             child: Icon(
                               _obscureText
@@ -654,9 +633,8 @@ class _LoginState extends State<LoginScreen> {
                             Expanded(
                               child: Text(
                                 _loginError!,
-                                style: text.small.copyWith(
+                                style: text.smallStrong.copyWith(
                                   color: scheme.destructive,
-                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
                             ),
@@ -676,9 +654,7 @@ class _LoginState extends State<LoginScreen> {
             height: kMinTap + 8,
             backgroundColor: schoolColor,
             foregroundColor: onButton,
-            decoration: ShadDecoration(
-              border: ShadBorder(radius: BorderRadius.circular(AppRadius.pill)),
-            ),
+            decoration: appPillDecoration(),
             child: _isSubmitting
                 ? SizedBox(
                     width: 20,

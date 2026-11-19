@@ -168,9 +168,8 @@ class _SchoolCalendarState extends State<SchoolCalendar> {
           backgroundColor: Colors.transparent,
           cellBorderColor: Colors.transparent,
           todayHighlightColor: accent,
-          todayTextStyle: text.small.copyWith(
+          todayTextStyle: text.smallStrong.copyWith(
             color: tone.onSolid,
-            fontWeight: FontWeight.w700,
           ),
           headerStyle: CalendarHeaderStyle(
             textStyle: text.large,
@@ -223,9 +222,8 @@ class _SchoolCalendarState extends State<SchoolCalendar> {
               Expanded(
                 child: Text(
                   next == null ? 'School calendar' : 'Next event',
-                  style: text.small.copyWith(
+                  style: text.smallStrong.copyWith(
                     color: onSolid.withValues(alpha: 0.85),
-                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
@@ -253,9 +251,8 @@ class _SchoolCalendarState extends State<SchoolCalendar> {
           Gap.hMd,
           Text(
             count == 1 ? '1 event this school year' : '$count events this school year',
-            style: text.small.copyWith(
+            style: text.smallStrong.copyWith(
               color: onSolid.withValues(alpha: 0.75),
-              fontWeight: FontWeight.w600,
             ),
           ),
         ],
@@ -265,70 +262,47 @@ class _SchoolCalendarState extends State<SchoolCalendar> {
 
   Widget _eventCard(Event event, SchoolTone tone) {
     final text = ShadTheme.of(context).textTheme;
-    final scheme = ShadTheme.of(context).colorScheme;
     final start = event.startTime;
     final hasDate = start.year > 1;
-    Widget detail(IconData icon, String value) => Row(
-      children: [
-        Icon(icon, size: IconSize.inline, color: scheme.mutedForeground),
-        Gap.wXs,
-        Expanded(child: Text(value, style: text.muted)),
-      ],
-    );
-    return RoundedCard(
-      padding: const EdgeInsets.all(Gap.lg),
-      radius: 24,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Filled date block: the colour sits on the background, the text on it is white.
-          Container(
-            width: 56,
-            padding: const EdgeInsets.symmetric(vertical: Gap.sm),
-            decoration: BoxDecoration(
-              color: tone.solid,
-              borderRadius: BorderRadius.circular(18),
-            ),
+    final subtitle = [
+      if (event.venue.isNotEmpty) event.venue,
+      if (event.time.isNotEmpty) event.time,
+    ].join(' · ');
+    return ListRow(
+      leading: Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: tone.solid,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        // Scales down instead of overflowing the 44px well at large text sizes.
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Padding(
+            padding: const EdgeInsets.all(Gap.xs),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                // Scales down instead of overflowing the 56px block at large text sizes.
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    hasDate ? '${start.day}' : '-',
-                    style: text.h3.copyWith(color: tone.onSolid, height: 1.1),
+                Text(
+                  hasDate ? DateFormat('MMM').format(start).toUpperCase() : '',
+                  style: text.small.copyWith(
+                    color: tone.onSolid.withValues(alpha: 0.85),
+                    fontSize: AppType.micro,
+                    height: 1.1,
                   ),
                 ),
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    hasDate ? DateFormat('MMM').format(start).toUpperCase() : '',
-                    style: text.small.copyWith(
-                      color: tone.onSolid.withValues(alpha: 0.85),
-                      fontSize: AppType.micro,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+                Text(
+                  hasDate ? '${start.day}' : '-',
+                  style: text.strong.copyWith(color: tone.onSolid, height: 1.1),
                 ),
               ],
             ),
           ),
-          Gap.wMd,
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(event.title, style: text.large),
-                Gap.hXs,
-                if (event.venue.isNotEmpty)
-                  detail(LucideIcons.mapPin, event.venue),
-                if (event.time.isNotEmpty)
-                  detail(LucideIcons.clock, event.time),
-              ],
-            ),
-          ),
-        ],
+        ),
       ),
+      title: event.title,
+      subtitle: subtitle.isEmpty ? null : subtitle,
     );
   }
 
@@ -353,26 +327,29 @@ class _SchoolCalendarState extends State<SchoolCalendar> {
       children: [
         _heroCard(tone, events),
         Gap.hSm,
-        ShadSelect<String>(
-          initialValue: selectedYear.isNotEmpty ? selectedYear : null,
-          placeholder: const Text('Choose a school year'),
-          options: [
-            for (final year in years)
-              ShadOption(value: year, child: Text(year)),
-          ],
-          selectedOptionBuilder: (context, value) => Text(value),
-          onChanged: (String? newValue) {
-            if (newValue == null) return;
-            setState(() {
-              selectedYear = newValue;
-              for (var yr in enrolledstud) {
-                if (yr.sydesc == selectedYear) {
-                  syid = yr.syid;
-                  getEvents();
+        ContextPill(
+          icon: LucideIcons.calendarDays,
+          label: selectedYear.isNotEmpty ? 'SY $selectedYear' : 'Choose a school year',
+          onTap: () => showOptionSheet<String>(
+            context,
+            title: 'School year',
+            subtitle: 'Show events for one school year',
+            value: selectedYear,
+            options: [
+              for (final year in years) (value: year, label: year, hint: null),
+            ],
+            onSelected: (newValue) {
+              setState(() {
+                selectedYear = newValue;
+                for (var yr in enrolledstud) {
+                  if (yr.sydesc == selectedYear) {
+                    syid = yr.syid;
+                    getEvents();
+                  }
                 }
-              }
-            });
-          },
+              });
+            },
+          ),
         ),
         Gap.hLg,
         _calendar(theme, tone),
@@ -469,9 +446,8 @@ class _SchoolCalendarState extends State<SchoolCalendar> {
           label,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: theme.textTheme.small.copyWith(
+          style: theme.textTheme.smallStrong.copyWith(
             color: tone.onSolid,
-            fontWeight: FontWeight.w700,
           ),
         ),
       ),

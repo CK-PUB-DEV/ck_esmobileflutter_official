@@ -209,12 +209,30 @@ class _BillingInformationV2PageState extends State<BillingInformationV2Page> {
     String semLabel(String id) =>
         schoolSem.firstWhere((s) => s.id.toString() == id, orElse: () => schoolSem.first).semester;
 
+    final pillLabel = [
+      if (selectedYear.isNotEmpty) yearLabel(selectedYear),
+      if (selectedSem.isNotEmpty && schoolSem.isNotEmpty) semLabel(selectedSem),
+    ].join('  •  ');
+
     return Padding(
       padding: const EdgeInsets.only(bottom: Gap.md),
-      child: Row(
-        children: [
-          Expanded(
-            child: ShadSelect<String>(
+      child: ContextPill(
+        icon: LucideIcons.calendar,
+        label: pillLabel.isEmpty ? 'School year' : pillLabel,
+        onTap: () => showPickerSheet(
+          context,
+          title: 'School year and semester',
+          child: _buildYearSemSelects(yearLabel, semLabel),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildYearSemSelects(String Function(String) yearLabel, String Function(String) semLabel) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+          ShadSelect<String>(
               placeholder: const Text('School year'),
               initialValue: selectedYear.isNotEmpty ? selectedYear : null,
               options: [
@@ -231,11 +249,9 @@ class _BillingInformationV2PageState extends State<BillingInformationV2Page> {
                 _loadLedger();
               },
             ),
-          ),
           if (schoolSem.isNotEmpty) ...[
-            Gap.wSm,
-            Expanded(
-              child: ShadSelect<String>(
+            Gap.hMd,
+              ShadSelect<String>(
                 placeholder: const Text('Semester'),
                 initialValue: selectedSem.isNotEmpty ? selectedSem : null,
                 options: [
@@ -252,10 +268,8 @@ class _BillingInformationV2PageState extends State<BillingInformationV2Page> {
                   _loadLedger();
                 },
               ),
-            ),
           ],
-        ],
-      ),
+      ],
     );
   }
 
@@ -314,6 +328,9 @@ class _BillingInformationV2PageState extends State<BillingInformationV2Page> {
   Widget _buildFeeCategoryTile(V2SchoolFee fee) {
     final theme = ShadTheme.of(context);
     final text = theme.textTheme;
+    final settled = fee.totalBalance <= 0.004;
+    final total = fee.totalAmount > 0 ? fee.totalAmount : fee.totalPaid + fee.totalBalance;
+    final ratio = total > 0 ? (fee.totalPaid / total).clamp(0.0, 1.0) : (settled ? 1.0 : 0.0);
     return AppCard(
       padding: EdgeInsets.zero,
       child: Theme(
@@ -324,22 +341,49 @@ class _BillingInformationV2PageState extends State<BillingInformationV2Page> {
           collapsedShape: const Border(),
           tilePadding: const EdgeInsets.symmetric(horizontal: Gap.lg, vertical: Gap.xs),
           childrenPadding: const EdgeInsets.only(bottom: Gap.sm),
-          title: Text(fee.particulars, style: text.strong),
-          subtitle: Padding(
-            padding: const EdgeInsets.only(top: Gap.xs),
-            child: Wrap(
-              spacing: Gap.md,
-              runSpacing: Gap.xs,
-              children: [
-                _labelValue('Due', Fmt.money(fee.totalBalance),
-                    color: fee.totalBalance > 0 ? theme.colorScheme.destructive : null),
-                _labelValue('Paid', Fmt.money(fee.totalPaid)),
-                if (fee.totalDiscount > 0) _labelValue('Discount', Fmt.money(fee.totalDiscount)),
-                if (fee.overpayment > 0) _labelValue('Overpaid', Fmt.money(fee.overpayment)),
-              ],
-            ),
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(child: Text(fee.particulars, style: text.strong)),
+                  Gap.wSm,
+                  settled
+                      ? const StatusBadge('Paid', status: AppStatus.success)
+                      : StatusBadge('Balance ${Fmt.money(fee.totalBalance)}', status: AppStatus.warning),
+                ],
+              ),
+              Gap.hSm,
+              ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadius.pill),
+                child: LinearProgressIndicator(
+                  value: ratio,
+                  minHeight: 8,
+                  backgroundColor: theme.colorScheme.muted,
+                  valueColor: AlwaysStoppedAnimation<Color>(SchoolTone.current(context).solid),
+                ),
+              ),
+              Gap.hXs,
+              Text('Paid ${Fmt.money(fee.totalPaid)} of ${Fmt.money(total)}', style: text.muted),
+            ],
           ),
-          children: fee.items.map((item) => _buildMonthItem(item)).toList(),
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(Gap.lg, 0, Gap.lg, Gap.sm),
+              child: Wrap(
+                spacing: Gap.lg,
+                runSpacing: Gap.xs,
+                children: [
+                  _labelValue('Paid', Fmt.money(fee.totalPaid)),
+                  if (fee.totalDiscount > 0) _labelValue('Discount', Fmt.money(fee.totalDiscount)),
+                  if (fee.overpayment > 0) _labelValue('Overpaid', Fmt.money(fee.overpayment)),
+                  _labelValue('Balance', Fmt.money(fee.totalBalance),
+                      bold: true, color: fee.totalBalance > 0 ? theme.colorScheme.destructive : null),
+                ],
+              ),
+            ),
+            ...fee.items.map((item) => _buildMonthItem(item)),
+          ],
         ),
       ),
     );
@@ -358,8 +402,7 @@ class _BillingInformationV2PageState extends State<BillingInformationV2Page> {
         title: Text(item.particulars, style: text.small),
         trailing: Text(
           Fmt.money(item.balance),
-          style: text.small.copyWith(
-            fontWeight: FontWeight.w600,
+          style: text.smallStrong.copyWith(
             color: item.balance > 0 ? theme.colorScheme.destructive : theme.colorScheme.foreground,
           ),
         ),
@@ -563,7 +606,7 @@ class _BillingInformationV2PageState extends State<BillingInformationV2Page> {
                 Icon(icon, size: IconSize.row, color: accent),
                 Gap.wSm,
                 Expanded(
-                  child: Text(title, style: text.p.copyWith(fontWeight: FontWeight.w600, color: accent)),
+                  child: Text(title, style: text.strong.copyWith(color: accent)),
                 ),
               ],
             ),
@@ -745,10 +788,7 @@ class _BillingInformationV2PageState extends State<BillingInformationV2Page> {
         Text('$label ', style: text.muted),
         Text(
           value,
-          style: text.small.copyWith(
-            fontWeight: bold ? FontWeight.w600 : FontWeight.w500,
-            color: color,
-          ),
+          style: (bold ? text.smallStrong : text.small).copyWith(color: color),
         ),
       ],
     );
