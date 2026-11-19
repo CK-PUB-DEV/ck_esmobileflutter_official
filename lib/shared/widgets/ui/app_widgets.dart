@@ -107,7 +107,7 @@ class InfoRow extends StatelessWidget {
             child: Text(
               value.isEmpty ? '—' : value,
               textAlign: TextAlign.end,
-              style: emphasis ? text.p.copyWith(fontWeight: FontWeight.w600) : text.p,
+              style: emphasis ? text.strong : text.p,
             ),
           ),
         ],
@@ -257,7 +257,7 @@ class ListRow extends StatelessWidget {
                 children: [
                   Text(
                     title,
-                    style: text.p.copyWith(fontWeight: FontWeight.w600),
+                    style: text.strong,
                   ),
                   if (subtitle != null) ...[
                     Gap.hXs,

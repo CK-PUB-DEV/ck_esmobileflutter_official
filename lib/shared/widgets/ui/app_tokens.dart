@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shadcn_ui/shadcn_ui.dart' show ShadTextTheme;
 
 /// Design tokens shared by every screen. Surfaces, headers and states read these instead of
 /// hard-coding numbers, so a change here changes the whole app consistently.
@@ -87,3 +88,48 @@ class StatusTone {
 
 /// Touch target for new controls. [kMinTap] (44) stays for the existing layouts.
 const double kTapTarget = 48;
+
+/// Type scale. shadcn's defaults (p 16, large 18, h4 20) are sized for the web and read loud on a
+/// phone, so the app theme (see `MyApp._textTheme`) swaps in these. Change a size here and the whole
+/// app follows; screens read the tokens off `ShadTheme.of(context).textTheme`.
+abstract final class AppType {
+  /// Hero figures: balance, big times and counts (`h1`).
+  static const double display = 28;
+
+  /// Large card headings (`h2`).
+  static const double heading = 22;
+
+  /// Card headings (`h3`).
+  static const double subheading = 20;
+
+  /// Page and sheet titles (`h4`).
+  static const double title = 18;
+
+  /// Section titles and empty-state headings (`large`).
+  static const double section = 16;
+
+  /// Body text (`p`).
+  static const double body = 14;
+
+  /// Secondary text (`small`).
+  static const double small = 13;
+
+  /// Captions and helper text (`muted`).
+  static const double caption = 12.5;
+
+  /// Smallest allowed text: tab labels and all-caps chips.
+  static const double micro = 11;
+
+  /// The phone's font-size setting is honoured, but kept inside this range so fixed-height rows,
+  /// tabs and cards don't clip at the largest settings.
+  static const double minTextScale = 0.9;
+  static const double maxTextScale = 1.3;
+}
+
+extension AppTextStyles on ShadTextTheme {
+  /// Body text in semibold: row titles, amounts, names. Use instead of `p.copyWith(fontWeight: ...)`.
+  TextStyle get strong => p.copyWith(fontWeight: FontWeight.w600);
+
+  /// Secondary text in semibold: small amounts, chips, inline labels.
+  TextStyle get smallStrong => small.copyWith(fontWeight: FontWeight.w600);
+}
