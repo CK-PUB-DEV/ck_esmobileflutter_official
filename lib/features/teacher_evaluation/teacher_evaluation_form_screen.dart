@@ -125,15 +125,38 @@ class _TeacherEvaluationFormScreenState extends State<TeacherEvaluationFormScree
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               padding: const EdgeInsets.fromLTRB(Gap.lg, Gap.sm, Gap.lg, Gap.xl),
               children: [
-                HeroCard(
-                  label: widget.period.label,
-                  icon: LucideIcons.userRound,
-                  value: widget.item.teacher.isEmpty ? 'Teacher' : widget.item.teacher,
-                  captions: ['${widget.item.subjectCode} · ${widget.item.subject}'],
+                RoundedCard(
+                  radius: AppRadius.card,
+                  margin: const EdgeInsets.only(bottom: Gap.md),
+                  padding: Gap.card,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(widget.period.label, style: theme.textTheme.muted),
+                      Text(widget.item.teacher.isEmpty ? 'Teacher' : widget.item.teacher, style: theme.textTheme.large),
+                      Text('${widget.item.subjectCode} · ${widget.item.subject}', style: theme.textTheme.muted),
+                      Gap.hMd,
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(AppRadius.pill),
+                        child: LinearProgressIndicator(
+                          value: total == 0 ? 0 : answered / total,
+                          minHeight: 8,
+                          backgroundColor: theme.colorScheme.muted,
+                          color: SchoolTone.current(context).solid,
+                        ),
+                      ),
+                      Gap.hSm,
+                      Text('$answered of $total answered', style: theme.textTheme.muted),
+                    ],
+                  ),
                 ),
                 AppCard(
                   title: 'Department',
-                  child: ShadInput(controller: _department, placeholder: const Text('e.g. CELA')),
+                  child: ShadInput(
+                    controller: _department,
+                    placeholder: const Text('e.g. CELA'),
+                    decoration: ShadDecoration(border: ShadBorder.all(radius: BorderRadius.circular(AppRadius.pill))),
+                  ),
                 ),
                 _ScaleGuide(scale: widget.form.scale),
                 SectionHeader(widget.form.intro.isEmpty ? 'Questions' : widget.form.intro),
@@ -172,20 +195,17 @@ class _TeacherEvaluationFormScreenState extends State<TeacherEvaluationFormScree
                 ),
               ],
             ),
-            child: Row(
-              children: [
-                Expanded(child: Text('$answered of $total answered', style: theme.textTheme.muted)),
-                Gap.wMd,
-                ShadButton(
-                  height: kTapTarget,
-                  decoration: appPillDecoration(),
-                  onPressed: _sending ? null : _submit,
-                  leading: _sending
-                      ? const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(LucideIcons.send, size: IconSize.inline),
-                  child: const Text('Submit'),
-                ),
-              ],
+            child: SizedBox(
+              width: double.infinity,
+              child: ShadButton(
+                height: kTapTarget,
+                decoration: appPillDecoration(),
+                onPressed: _sending ? null : _submit,
+                leading: _sending
+                    ? const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(LucideIcons.send, size: IconSize.inline),
+                child: const Text('Submit'),
+              ),
             ),
           ),
         ],
@@ -211,6 +231,24 @@ class _ScaleGuide extends StatelessWidget {
           tilePadding: const EdgeInsets.symmetric(horizontal: Gap.lg),
           childrenPadding: const EdgeInsets.fromLTRB(Gap.lg, 0, Gap.lg, Gap.lg),
           title: Text('Rating guide', style: theme.textTheme.strong),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: Gap.sm),
+            child: Wrap(
+              spacing: Gap.xs,
+              runSpacing: Gap.xs,
+              children: [
+                for (final s in scale)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: Gap.sm + 2, vertical: Gap.xs),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.muted,
+                      borderRadius: BorderRadius.circular(AppRadius.pill),
+                    ),
+                    child: Text('${s.score} · ${s.label}', style: theme.textTheme.small),
+                  ),
+              ],
+            ),
+          ),
           children: [
             for (final s in scale)
               Padding(
@@ -218,7 +256,7 @@ class _ScaleGuide extends StatelessWidget {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SizedBox(width: 28, child: Text('${s.score}', style: theme.textTheme.large)),
+                    SizedBox(width: 28, child: Text('${s.score}', style: theme.textTheme.strong)),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -275,7 +313,7 @@ class _QuestionCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('${question.no}. ${question.text}', style: theme.textTheme.p),
+              Text('${question.no}. ${question.text}', style: theme.textTheme.strong),
               Gap.hMd,
               Row(
                 children: [
@@ -287,19 +325,18 @@ class _QuestionCard extends StatelessWidget {
                         label: 'Score ${s.score}, ${s.label}',
                         excludeSemantics: true,
                         child: InkWell(
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(AppRadius.pill),
                           onTap: () => onChanged(s.score),
                           child: Container(
                             height: kTapTarget,
                             alignment: Alignment.center,
                             decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(16),
+                              borderRadius: BorderRadius.circular(AppRadius.pill),
                               color: s.score == value ? tone.solid : theme.colorScheme.muted,
                             ),
                             child: Text(
                               '${s.score}',
-                              style: theme.textTheme.p.copyWith(
-                                fontWeight: FontWeight.w700,
+                              style: theme.textTheme.strong.copyWith(
                                 color: s.score == value ? tone.onSolid : theme.colorScheme.foreground,
                               ),
                             ),

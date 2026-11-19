@@ -130,7 +130,7 @@ class _SchoolFinderSheetState extends State<_SchoolFinderSheet> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Find your school', style: text.h4.copyWith(fontWeight: FontWeight.w800)),
+                      Text('Find your school', style: text.h4),
                       Gap.hXs,
                       Text('Enter your school code or name.', style: text.muted),
                       Gap.hLg,
@@ -231,7 +231,11 @@ class _SchoolFinderSheetState extends State<_SchoolFinderSheet> {
               title: 'No school matches that',
               message: 'Check the spelling, or ask your school for its code.',
             ),
-            ShadButton.outline(onPressed: _search.clear, child: const Text('Clear')),
+            ShadButton.outline(
+              onPressed: _search.clear,
+              decoration: appPillDecoration(),
+              child: const Text('Clear'),
+            ),
           ],
         );
       case SchoolMatchKind.exactCode:
@@ -263,7 +267,7 @@ class _SchoolFinderSheetState extends State<_SchoolFinderSheet> {
           child: ExcludeSemantics(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: Gap.xs),
-              child: Text(heading, style: text.large.copyWith(fontWeight: FontWeight.w700)),
+              child: Text(heading, style: text.strong),
             ),
           ),
         ),
@@ -275,7 +279,6 @@ class _SchoolFinderSheetState extends State<_SchoolFinderSheet> {
 
   Widget _row(School school) {
     final scheme = ShadTheme.of(context).colorScheme;
-    final tone = SchoolTone.current(context);
     final unavailable = school.eslink.isEmpty;
     return ListRow(
       title: school.schoolname,
@@ -286,8 +289,8 @@ class _SchoolFinderSheetState extends State<_SchoolFinderSheet> {
           ? '${school.schoolname}, currently unavailable'
           : 'Choose ${school.schoolname}',
       leading: Container(
-        width: 48,
-        height: 48,
+        width: 44,
+        height: 44,
         padding: const EdgeInsets.all(Gap.xs + 2),
         decoration: BoxDecoration(
           color: Colors.white,
@@ -307,11 +310,10 @@ class _SchoolFinderSheetState extends State<_SchoolFinderSheet> {
       ),
       trailing: unavailable
           ? null
-          : Container(
-              width: 30,
-              height: 30,
-              decoration: BoxDecoration(color: tone.solid, shape: BoxShape.circle),
-              child: Icon(LucideIcons.arrowRight, color: tone.onSolid, size: IconSize.inline),
+          : Icon(
+              LucideIcons.chevronRight,
+              size: IconSize.inline,
+              color: scheme.mutedForeground,
             ),
       onTap: unavailable ? null : () => _pick(school),
     );

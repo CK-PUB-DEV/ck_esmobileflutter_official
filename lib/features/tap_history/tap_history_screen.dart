@@ -115,47 +115,38 @@ class _TapHistoryScreenState extends State<TapHistoryScreen> {
   }
 
   Widget _filters() {
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          flex: 3,
-          child: ShadSelect<String>(
-            initialValue: selectedMonth,
-            placeholder: const Text('Month'),
+        FilterChips<String>(
+          options: [
+            for (final state in _states)
+              (
+                value: state,
+                label: state == 'ALL' ? 'All taps' : (state == 'IN' ? 'In' : 'Out'),
+              ),
+          ],
+          value: selectedState,
+          onChanged: (value) {
+            selectedState = value;
+            filterTapHistory();
+          },
+        ),
+        Gap.hSm,
+        ContextPill(
+          icon: LucideIcons.calendar,
+          label: selectedMonth == 'ALL' ? 'All months' : selectedMonth,
+          onTap: () => showOptionSheet<String>(
+            context,
+            title: 'Month',
+            subtitle: 'Show gate taps from one month',
+            value: selectedMonth,
             options: [
               for (final month in _months)
-                ShadOption(
-                  value: month,
-                  child: Text(month == 'ALL' ? 'All months' : month),
-                ),
+                (value: month, label: month == 'ALL' ? 'All months' : month, hint: null),
             ],
-            selectedOptionBuilder: (context, value) =>
-                Text(value == 'ALL' ? 'All months' : value),
-            onChanged: (value) {
-              if (value == null) return;
-              selectedMonth = value;
-              filterTapHistory();
-            },
-          ),
-        ),
-        Gap.wSm,
-        Expanded(
-          flex: 2,
-          child: ShadSelect<String>(
-            initialValue: selectedState,
-            placeholder: const Text('Status'),
-            options: [
-              for (final state in _states)
-                ShadOption(
-                  value: state,
-                  child: Text(state == 'ALL' ? 'All taps' : state),
-                ),
-            ],
-            selectedOptionBuilder: (context, value) =>
-                Text(value == 'ALL' ? 'All taps' : value),
-            onChanged: (value) {
-              if (value == null) return;
-              selectedState = value;
+            onSelected: (month) {
+              selectedMonth = month;
               filterTapHistory();
             },
           ),
@@ -187,9 +178,8 @@ class _TapHistoryScreenState extends State<TapHistoryScreen> {
               Expanded(
                 child: Text(
                   'Last tap',
-                  style: text.small.copyWith(
+                  style: text.smallStrong.copyWith(
                     color: onSolid.withValues(alpha: 0.85),
-                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
@@ -213,62 +203,21 @@ class _TapHistoryScreenState extends State<TapHistoryScreen> {
   }
 
   Widget _tapRow(TapHistory history, SchoolTone tone) {
-    final theme = ShadTheme.of(context);
     final isIn = history.tapstate == 'IN';
-    return RoundedCard(
-      margin: const EdgeInsets.only(bottom: Gap.sm),
-      padding: const EdgeInsets.symmetric(horizontal: Gap.md, vertical: Gap.md),
-      radius: 24,
-      child: Row(
-        children: [
-          SchoolIcon(isIn ? LucideIcons.logIn : LucideIcons.logOut),
-          Gap.wMd,
-          Expanded(
-            child: Text(
-              Fmt.time(history.ttime),
-              style: theme.textTheme.strong,
-            ),
-          ),
-          StatusBadge(
-            isIn ? 'In' : 'Out',
-            status: isIn ? AppStatus.success : AppStatus.info,
-          ),
-        ],
+    return ListRow(
+      leading: SchoolIcon(isIn ? LucideIcons.logIn : LucideIcons.logOut),
+      title: Fmt.time(history.ttime),
+      subtitle: Fmt.date(history.tdate),
+      trailing: StatusBadge(
+        isIn ? 'In' : 'Out',
+        status: isIn ? AppStatus.success : AppStatus.neutral,
       ),
     );
   }
 
-  List<Widget> _grouped(SchoolTone tone) {
-    final items = <Widget>[];
-    String? currentDate;
-    for (final history in filteredTapHistory) {
-      if (history.tdate != currentDate) {
-        currentDate = history.tdate;
-        items.add(
-          Padding(
-            padding: EdgeInsets.only(
-              top: items.isNotEmpty ? Gap.xl : 0,
-              bottom: Gap.md,
-            ),
-            child: Row(
-              children: [
-                AccentBar(tone),
-                Gap.wSm,
-                Expanded(
-                  child: Text(
-                    Fmt.date(history.tdate),
-                    style: ShadTheme.of(context).textTheme.large,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      }
-      items.add(_tapRow(history, tone));
-    }
-    return items;
-  }
+  List<Widget> _grouped(SchoolTone tone) => [
+    for (final history in filteredTapHistory) _tapRow(history, tone),
+  ];
 
   @override
   Widget build(BuildContext context) {
