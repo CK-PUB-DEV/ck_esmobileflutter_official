@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:pushtrial/models/enrolled_student.dart';
-import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pushtrial/core/api/api.dart';
 import 'dart:convert';
@@ -81,25 +80,29 @@ class EnrollmentScreenState extends State<EnrollmentScreen> {
     return AppPage(
       title: 'Enrollment information',
       children: [
-        ShadSelect<String>(
-          initialValue: selectedYear.isNotEmpty ? selectedYear : null,
-          placeholder: const Text('Choose a school year'),
-          options: [
-            for (final option in schoolYear)
-              ShadOption(value: option.id.toString(), child: Text(option.sydesc)),
-          ],
-          selectedOptionBuilder: (context, value) {
-            final match = schoolYear.where((y) => y.id.toString() == value);
-            return Text(match.isEmpty ? value : match.first.sydesc);
-          },
-          onChanged: (value) {
-            if (value == null) return;
-            setState(() {
-              selectedYear = value;
-              syid = int.parse(selectedYear);
-            });
-            getEnrolledStud();
-          },
+        ContextPill(
+          icon: LucideIcons.calendarDays,
+          label: () {
+            final match = schoolYear.where((y) => y.id.toString() == selectedYear);
+            return match.isEmpty ? 'Choose a school year' : 'SY ${match.first.sydesc}';
+          }(),
+          onTap: () => showOptionSheet<String>(
+            context,
+            title: 'School year',
+            subtitle: 'Show enrollment for one school year',
+            value: selectedYear,
+            options: [
+              for (final option in schoolYear)
+                (value: option.id.toString(), label: option.sydesc, hint: null),
+            ],
+            onSelected: (value) {
+              setState(() {
+                selectedYear = value;
+                syid = int.parse(selectedYear);
+              });
+              getEnrolledStud();
+            },
+          ),
         ),
         Gap.hLg,
         if (matches.isEmpty)

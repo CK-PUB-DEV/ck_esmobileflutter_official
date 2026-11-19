@@ -41,6 +41,7 @@ class _ClassScheduleV2ScreenState extends State<ClassScheduleV2Screen> {
   int levelid = 0;
   String selectedYear = '';
   String selectedSem = '';
+  String? _selectedDay;
 
   bool loading = true;
   // Set when the schedule could not be loaded, so the page offers Retry instead of looking empty.
@@ -176,10 +177,47 @@ class _ClassScheduleV2ScreenState extends State<ClassScheduleV2Screen> {
     _loadSchedule();
   }
 
-  /// Small icons stay neutral: the school colour is used on backgrounds only.
-  Color _accent(BuildContext context) => ShadTheme.of(context).colorScheme.mutedForeground;
+  bool get _showSem => levelid == 14 || levelid == 15 || levelid >= 17;
 
-  /// "SY 2025-2026 · 1st Semester" for the hero card.
+  void _openPicker() {
+    showPickerSheet(
+      context,
+      title: 'School year and semester',
+      child: StatefulBuilder(
+        builder: (context, setSheet) {
+          final showSem = _showSem;
+          return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _FieldSelect(
+              label: 'School year',
+              value: selectedYear.isNotEmpty ? selectedYear : null,
+              options: [for (final y in schoolYear) (y.id.toString(), y.sydesc)],
+              onChanged: (v) {
+                _onYearChanged(v);
+                setSheet(() {});
+              },
+            ),
+            if (showSem) ...[
+              Gap.hMd,
+              _FieldSelect(
+                label: 'Semester',
+                value: selectedSem.isNotEmpty ? selectedSem : null,
+                options: [for (final s in schoolSem) (s.id.toString(), s.semester)],
+                onChanged: (v) {
+                  _onSemChanged(v);
+                  setSheet(() {});
+                },
+              ),
+            ],
+          ],
+          );
+        },
+      ),
+    );
+  }
+
+  /// "SY 2025-2026 · 1st Semester" for the context pill.
   String? _heroPill(bool showSem) {
     final year = schoolYear.where((y) => y.id.toString() == selectedYear).map((y) => y.sydesc).firstOrNull;
     if (year == null) return null;
@@ -191,7 +229,37 @@ class _ClassScheduleV2ScreenState extends State<ClassScheduleV2Screen> {
 
   @override
   Widget build(BuildContext context) {
-    final showSem = levelid == 14 || levelid == 15 || levelid >= 17;
+    final showSem = _showSem;
+    final text = ShadTheme.of(context).textTheme;
+
+    // One entry per class slot, so the timeline can be filtered by day and sorted by time.
+    final entries = <({V2Subject subj, V2ScheduleSlot slot})>[
+      for (final s in subjects)
+        for (final slot in s.schedule) (subj: s, slot: slot),
+    ];
+    final days = <String>[];
+    for (final e in entries) {
+      if (e.slot.day.isNotEmpty && !days.contains(e.slot.day)) days.add(e.slot.day);
+    }
+    days.sort((a, b) => _dayOrder(a).compareTo(_dayOrder(b)));
+    // Slots without a day stay reachable under an "Other" chip.
+    if (entries.any((e) => e.slot.day.isEmpty)) days.add(_otherDay);
+    final today = _todayIndex();
+    String? day;
+    if (days.isNotEmpty) {
+      day = days.contains(_selectedDay)
+          ? _selectedDay
+          : (days.where((d) => _dayOrder(d) == today).firstOrNull ?? days.first);
+    }
+    final visible = [
+      for (final e in entries)
+        if (day == null ||
+            (day == _otherDay ? e.slot.day.isEmpty : e.slot.day == day))
+          e,
+    ]..sort((a, b) => _minutes(a.slot.start).compareTo(_minutes(b.slot.start)));
+    final unscheduled = [for (final s in subjects) if (s.schedule.isEmpty) s];
+    final pill = _heroPill(showSem);
+
     return AppPage(
       title: 'Class schedule',
       body: loading
@@ -200,38 +268,27 @@ class _ClassScheduleV2ScreenState extends State<ClassScheduleV2Screen> {
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(Gap.lg, Gap.sm, Gap.lg, Gap.xl),
               children: [
-                if (subjects.isNotEmpty)
-                  HeroCard(
-                    label: 'Class schedule',
-                    icon: LucideIcons.calendarClock,
-                    value: '${subjects.length} subject${subjects.length == 1 ? '' : 's'}',
-                    pill: _heroPill(showSem),
-                  ),
                 Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: _FieldSelect(
-                        label: 'School year',
-                        value: selectedYear.isNotEmpty ? selectedYear : null,
-                        options: [for (final y in schoolYear) (y.id.toString(), y.sydesc)],
-                        onChanged: _onYearChanged,
+                    Flexible(
+                      child: IntrinsicWidth(
+                        child: ContextPill(
+                          label: pill ?? 'Select school year',
+                          icon: LucideIcons.calendarClock,
+                          onTap: _openPicker,
+                        ),
                       ),
                     ),
-                    if (showSem) ...[
+                    if (subjects.isNotEmpty) ...[
                       Gap.wMd,
-                      Expanded(
-                        child: _FieldSelect(
-                          label: 'Semester',
-                          value: selectedSem.isNotEmpty ? selectedSem : null,
-                          options: [for (final s in schoolSem) (s.id.toString(), s.semester)],
-                          onChanged: _onSemChanged,
-                        ),
+                      Text(
+                        '${subjects.length} subject${subjects.length == 1 ? '' : 's'}',
+                        style: text.muted,
                       ),
                     ],
                   ],
                 ),
-                Gap.hXl,
+                Gap.hLg,
                 if (subjects.isEmpty && _failed)
                   Padding(
                     padding: const EdgeInsets.only(top: Gap.xxl),
@@ -249,114 +306,188 @@ class _ClassScheduleV2ScreenState extends State<ClassScheduleV2Screen> {
                       icon: LucideIcons.calendarX,
                     ),
                   )
-                else
-                  for (final subj in subjects) _buildSubjectCard(subj),
+                else ...[
+                  if (days.isNotEmpty) ...[
+                    FilterChips<String>(
+                      options: [
+                        for (final d in days)
+                          (value: d, label: d == _otherDay ? d : (d.length > 3 ? d.substring(0, 3) : d)),
+                      ],
+                      value: day!,
+                      onChanged: (v) => setState(() => _selectedDay = v),
+                    ),
+                    Gap.hLg,
+                  ],
+                  for (final e in visible)
+                    _TimelineRow(
+                      start: e.slot.start,
+                      end: e.slot.end,
+                      subject: e.subj.subjdesc,
+                      detail: [e.subj.subjcode, e.slot.type].where((s) => s.trim().isNotEmpty).join(' · '),
+                      teacher: e.subj.teacherName,
+                      room: e.slot.room,
+                      live: _isLive(e.slot, today),
+                    ),
+                  if (unscheduled.isNotEmpty) ...[
+                    Gap.hMd,
+                    Text('No schedule assigned', style: text.muted),
+                    Gap.hSm,
+                    for (final s in unscheduled)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: Gap.xs),
+                        child: Text(s.subjdesc, style: text.small),
+                      ),
+                  ],
+                ],
               ],
             ),
     );
   }
 
-  Widget _buildSubjectCard(V2Subject subj) {
-    final theme = ShadTheme.of(context);
-    final text = theme.textTheme;
-    final accent = _accent(context);
-    return AppCard(
-      padding: Gap.card,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Text(subj.subjdesc, style: text.large, maxLines: 3, overflow: TextOverflow.ellipsis),
-              ),
-              if (subj.subjcode.isNotEmpty) ...[
-                Gap.wSm,
-                SchoolPill(subj.subjcode, SchoolTone.current(context)),
-              ],
-            ],
-          ),
-          if (subj.teacherName.isNotEmpty) ...[
-            Gap.hSm,
-            _Meta(icon: LucideIcons.user, text: subj.teacherName, color: accent),
-          ],
-          Gap.hMd,
-          Divider(height: 1, color: theme.colorScheme.border),
-          Gap.hMd,
-          if (subj.schedule.isEmpty)
-            _Meta(icon: LucideIcons.clock, text: 'No schedule assigned', color: accent, muted: true)
-          else
-            for (var i = 0; i < subj.schedule.length; i++) ...[
-              if (i > 0) Gap.hMd,
-              _buildSlot(subj.schedule[i], accent),
-            ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSlot(V2ScheduleSlot slot, Color accent) {
-    final text = ShadTheme.of(context).textTheme;
-    final hasTime = slot.start.isNotEmpty || slot.end.isNotEmpty;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (slot.day.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(bottom: Gap.xs),
-            child: Text(slot.day, style: text.strong),
-          ),
-        Wrap(
-          spacing: Gap.lg,
-          runSpacing: Gap.xs,
-          children: [
-            if (hasTime)
-              _Meta(
-                icon: LucideIcons.clock,
-                text: '${slot.start} - ${slot.end}',
-                color: accent,
-                muted: true,
-              ),
-            if (slot.room.isNotEmpty)
-              _Meta(icon: LucideIcons.doorOpen, text: slot.room, color: accent, muted: true),
-            if (slot.type.isNotEmpty)
-              _Meta(icon: LucideIcons.tag, text: slot.type, color: accent, muted: true),
-          ],
-        ),
-      ],
-    );
+  bool _isLive(V2ScheduleSlot slot, int today) {
+    if (_dayOrder(slot.day) != today) return false;
+    final start = _minutes(slot.start);
+    final end = _minutes(slot.end);
+    final now = DateTime.now();
+    final nowMin = now.hour * 60 + now.minute;
+    return start >= 0 && end > start && nowMin >= start && nowMin < end;
   }
 }
 
-/// Small icon + text line (teacher, time, room). Wraps instead of clipping.
-class _Meta extends StatelessWidget {
-  const _Meta({required this.icon, required this.text, required this.color, this.muted = false});
+/// Chip value for slots that carry no day.
+const _otherDay = 'Other';
 
-  final IconData icon;
-  final String text;
-  final Color color;
-  final bool muted;
+const _weekdays = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+/// 0 = Monday ... 6 = Sunday; 99 when the text is not a weekday.
+int _dayOrder(String day) {
+  final p = day.trim().toLowerCase();
+  if (p.length < 3) return 99;
+  final i = _weekdays.indexOf(p.substring(0, 3));
+  return i < 0 ? 99 : i;
+}
+
+int _todayIndex() => DateTime.now().weekday - 1;
+
+/// Minutes since midnight for "7:30 AM" / "07:30" / "13:05:00"; -1 when it cannot be read.
+int _minutes(String t) {
+  final m = RegExp(r'(\d{1,2}):(\d{2})(?::\d{2})?\s*([aApP][mM])?').firstMatch(t);
+  if (m == null) return -1;
+  var h = int.parse(m.group(1)!);
+  final min = int.parse(m.group(2)!);
+  final ap = m.group(3)?.toLowerCase();
+  if (ap == 'pm' && h < 12) h += 12;
+  if (ap == 'am' && h == 12) h = 0;
+  return h * 60 + min;
+}
+
+/// Timeline row: start/end time on the left, a rounded card with the class on the right.
+/// The class happening now is filled with the school colour.
+class _TimelineRow extends StatelessWidget {
+  const _TimelineRow({
+    required this.start,
+    required this.end,
+    required this.subject,
+    required this.detail,
+    required this.teacher,
+    required this.room,
+    required this.live,
+  });
+
+  final String start;
+  final String end;
+  final String subject;
+  final String detail;
+  final String teacher;
+  final String room;
+  final bool live;
 
   @override
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(top: 2),
-          child: Icon(icon, size: IconSize.inline, color: color),
-        ),
-        Gap.wSm,
-        Flexible(
-          child: Text(text, style: muted ? theme.textTheme.muted : theme.textTheme.small),
-        ),
-      ],
+    final text = theme.textTheme;
+    final tone = SchoolTone.current(context);
+    final muted = theme.colorScheme.mutedForeground;
+    const tabular = [FontFeature.tabularFigures()];
+    final metaColor = live ? tone.onSolid.withValues(alpha: 0.85) : muted;
+    final metaStyle = text.muted.copyWith(color: metaColor);
+
+    Widget meta(IconData icon, String value) => Padding(
+          padding: const EdgeInsets.only(top: Gap.xs),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Icon(icon, size: IconSize.inline, color: metaColor),
+              ),
+              Gap.wSm,
+              Expanded(child: Text(value, style: metaStyle)),
+            ],
+          ),
+        );
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Gap.md),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 54,
+            child: Padding(
+              padding: const EdgeInsets.only(top: Gap.md),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(start, style: text.smallStrong.copyWith(fontFeatures: tabular)),
+                  ),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(end, style: text.muted.copyWith(fontFeatures: tabular)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Gap.wSm,
+          Expanded(
+            child: Container(
+              width: double.infinity,
+              padding: Gap.card,
+              decoration: BoxDecoration(
+                color: live ? tone.solid : theme.colorScheme.card,
+                borderRadius: BorderRadius.circular(AppRadius.row),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    subject,
+                    style: live ? text.strong.copyWith(color: tone.onSolid) : text.strong,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (detail.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: Gap.xs),
+                      child: Text(detail, style: metaStyle),
+                    ),
+                  if (teacher.isNotEmpty) meta(LucideIcons.user, teacher),
+                  if (room.isNotEmpty) meta(LucideIcons.doorOpen, room),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
+
 
 /// Labelled shadcn select. Rebuilds when [value] changes from outside (year changes the
 /// semester), because [ShadSelect] only reads its initial value once.
