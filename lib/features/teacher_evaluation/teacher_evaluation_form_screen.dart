@@ -210,7 +210,7 @@ class _ScaleGuide extends StatelessWidget {
         child: ExpansionTile(
           tilePadding: const EdgeInsets.symmetric(horizontal: Gap.lg),
           childrenPadding: const EdgeInsets.fromLTRB(Gap.lg, 0, Gap.lg, Gap.lg),
-          title: Text('Rating guide', style: theme.textTheme.p.copyWith(fontWeight: FontWeight.w600)),
+          title: Text('Rating guide', style: theme.textTheme.strong),
           children: [
             for (final s in scale)
               Padding(
@@ -223,7 +223,7 @@ class _ScaleGuide extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(s.label, style: theme.textTheme.p.copyWith(fontWeight: FontWeight.w600)),
+                          Text(s.label, style: theme.textTheme.strong),
                           Text(s.description, style: theme.textTheme.muted),
                         ],
                       ),

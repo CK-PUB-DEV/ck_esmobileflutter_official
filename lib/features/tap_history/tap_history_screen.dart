@@ -226,7 +226,7 @@ class _TapHistoryScreenState extends State<TapHistoryScreen> {
           Expanded(
             child: Text(
               Fmt.time(history.ttime),
-              style: theme.textTheme.p.copyWith(fontWeight: FontWeight.w600),
+              style: theme.textTheme.strong,
             ),
           ),
           StatusBadge(

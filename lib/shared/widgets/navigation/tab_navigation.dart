@@ -201,7 +201,7 @@ class _TabButton extends StatelessWidget {
           theme.textTheme.small.copyWith(fontWeight: FontWeight.w500),
           theme.textTheme.small.copyWith(fontWeight: FontWeight.w700),
           s,
-        )!.copyWith(color: foreground, fontSize: 11, height: 1.1);
+        )!.copyWith(color: foreground, fontSize: AppType.micro, height: 1.1);
         final labelOpacity = (1 - collapse * 1.6).clamp(0.0, 1.0);
 
         return Semantics(
