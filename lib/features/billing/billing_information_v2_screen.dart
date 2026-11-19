@@ -324,7 +324,7 @@ class _BillingInformationV2PageState extends State<BillingInformationV2Page> {
           collapsedShape: const Border(),
           tilePadding: const EdgeInsets.symmetric(horizontal: Gap.lg, vertical: Gap.xs),
           childrenPadding: const EdgeInsets.only(bottom: Gap.sm),
-          title: Text(fee.particulars, style: text.p.copyWith(fontWeight: FontWeight.w600)),
+          title: Text(fee.particulars, style: text.strong),
           subtitle: Padding(
             padding: const EdgeInsets.only(top: Gap.xs),
             child: Wrap(
@@ -576,7 +576,7 @@ class _BillingInformationV2PageState extends State<BillingInformationV2Page> {
                     Expanded(child: Text(line.text, style: text.small)),
                     if (line.amount != null) ...[
                       Gap.wSm,
-                      Text(Fmt.money(line.amount), style: text.small.copyWith(fontWeight: FontWeight.w600)),
+                      Text(Fmt.money(line.amount), style: text.smallStrong),
                     ],
                   ],
                 ),
@@ -620,7 +620,7 @@ class _BillingInformationV2PageState extends State<BillingInformationV2Page> {
                       ),
                       Gap.wSm,
                       Expanded(
-                        child: Text(g.label, style: text.p.copyWith(fontWeight: FontWeight.w600)),
+                        child: Text(g.label, style: text.strong),
                       ),
                       StatusBadge(statusLabel, status: status),
                     ],
@@ -653,7 +653,7 @@ class _BillingInformationV2PageState extends State<BillingInformationV2Page> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(_scheduleFees(m), style: text.small.copyWith(fontWeight: FontWeight.w600)),
+          Text(_scheduleFees(m), style: text.smallStrong),
           Gap.hXs,
           Text(
             due == null ? 'No due date' : 'Due ${Fmt.dayMonth(due)}${overdue ? '  •  overdue' : ''}',
@@ -698,7 +698,7 @@ class _BillingInformationV2PageState extends State<BillingInformationV2Page> {
                   Expanded(
                     child: Text(
                       'Fully paid: $range (${paid.length} month${paid.length == 1 ? '' : 's'})',
-                      style: text.small.copyWith(fontWeight: FontWeight.w600),
+                      style: text.smallStrong,
                     ),
                   ),
                 ],

@@ -109,17 +109,44 @@ Future<void> _main() async {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
+  /// The app's type scale (see [AppType]); shadcn's own sizes are tuned for the web and run large
+  /// on a phone. Line heights stay generous for wrapped text.
+  ///
   /// shadcn text styles carry no colour of their own, so `textTheme.muted` would render as plain
   /// foreground text. Bake the muted colour in so every `muted` label really looks muted.
-  ///
-  /// shadcn's `small` also has a line height of 1, which crowds wrapped lines, so give it 1.4.
   static ShadTextTheme _textTheme(ShadColorScheme scheme) => ShadTextTheme(
-    muted: ShadTextDefaultTheme.muted(
+    h1: ShadTextDefaultTheme.h1(
       family: kDefaultFontFamily,
-    ).copyWith(color: scheme.mutedForeground),
+    ).copyWith(
+      fontSize: AppType.display,
+      fontWeight: FontWeight.w700,
+      height: 1.15,
+    ),
+    h2: ShadTextDefaultTheme.h2(
+      family: kDefaultFontFamily,
+    ).copyWith(fontSize: AppType.heading, height: 1.2),
+    h3: ShadTextDefaultTheme.h3(
+      family: kDefaultFontFamily,
+    ).copyWith(fontSize: AppType.subheading, height: 1.2),
+    h4: ShadTextDefaultTheme.h4(
+      family: kDefaultFontFamily,
+    ).copyWith(fontSize: AppType.title, height: 1.3),
+    large: ShadTextDefaultTheme.large(
+      family: kDefaultFontFamily,
+    ).copyWith(fontSize: AppType.section, height: 1.4),
+    p: ShadTextDefaultTheme.p(
+      family: kDefaultFontFamily,
+    ).copyWith(fontSize: AppType.body, height: 1.45),
     small: ShadTextDefaultTheme.small(
       family: kDefaultFontFamily,
-    ).copyWith(height: 1.4),
+    ).copyWith(fontSize: AppType.small, height: 1.4),
+    muted: ShadTextDefaultTheme.muted(
+      family: kDefaultFontFamily,
+    ).copyWith(
+      fontSize: AppType.caption,
+      height: 1.4,
+      color: scheme.mutedForeground,
+    ),
   );
 
   // Built once: rebuilding these on every toggle added to the lag.
@@ -151,6 +178,18 @@ class MyApp extends StatelessWidget {
     final base = ThemeData(
       fontFamily: shadTheme.textTheme.family,
       brightness: shadTheme.brightness,
+      // Unstyled `Text`, list tiles and Material widgets read these, so they match the app scale.
+      textTheme: const TextTheme(
+        bodyLarge: TextStyle(fontSize: AppType.body, height: 1.45),
+        bodyMedium: TextStyle(fontSize: AppType.body, height: 1.45),
+        bodySmall: TextStyle(fontSize: AppType.caption, height: 1.4),
+        titleLarge: TextStyle(fontSize: AppType.title),
+        titleMedium: TextStyle(fontSize: AppType.section),
+        titleSmall: TextStyle(fontSize: AppType.body),
+        labelLarge: TextStyle(fontSize: AppType.body),
+        labelMedium: TextStyle(fontSize: AppType.small),
+        labelSmall: TextStyle(fontSize: AppType.micro),
+      ),
       colorScheme: ColorScheme(
         brightness: shadTheme.brightness,
         primary: shad.primary,
@@ -190,7 +229,7 @@ class MyApp extends StatelessWidget {
         iconTheme: IconThemeData(color: shad.foreground),
         titleTextStyle: TextStyle(
           color: shad.foreground,
-          fontSize: 18,
+          fontSize: AppType.title,
           fontWeight: FontWeight.w600,
         ),
         systemOverlayStyle: dark
@@ -226,10 +265,10 @@ class MyApp extends StatelessWidget {
         headingRowColor: WidgetStatePropertyAll(shad.muted),
         headingTextStyle: TextStyle(
           color: shad.foreground,
-          fontSize: 12,
+          fontSize: AppType.caption,
           fontWeight: FontWeight.w600,
         ),
-        dataTextStyle: TextStyle(color: shad.foreground, fontSize: 12),
+        dataTextStyle: TextStyle(color: shad.foreground, fontSize: AppType.caption),
         dividerThickness: 1,
       ),
       listTileTheme: ListTileThemeData(
@@ -314,11 +353,20 @@ class MyApp extends StatelessWidget {
           ],
           // A plain (non-animated) ShadTheme here shadows the one ShadApp lerps over 200ms, so the
           // screens below see the new theme at once and rebuild a single time.
-          builder: (context, child) => ShadTheme(
-            data: AppThemeController.instance.isDark
-                ? _darkShadTheme
-                : _lightShadTheme,
-            child: _ThemeSwitchFade(child: ShadAppBuilder(child: child!)),
+          builder: (context, child) => MediaQuery(
+            // Honour the phone's font size, but keep it in range (see AppType).
+            data: MediaQuery.of(context).copyWith(
+              textScaler: MediaQuery.textScalerOf(context).clamp(
+                minScaleFactor: AppType.minTextScale,
+                maxScaleFactor: AppType.maxTextScale,
+              ),
+            ),
+            child: ShadTheme(
+              data: AppThemeController.instance.isDark
+                  ? _darkShadTheme
+                  : _lightShadTheme,
+              child: _ThemeSwitchFade(child: ShadAppBuilder(child: child!)),
+            ),
           ),
           initialRoute: '/loading',
           routes: {

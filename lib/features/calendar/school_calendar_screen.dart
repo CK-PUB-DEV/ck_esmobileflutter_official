@@ -305,7 +305,7 @@ class _SchoolCalendarState extends State<SchoolCalendar> {
                     hasDate ? DateFormat('MMM').format(start).toUpperCase() : '',
                     style: text.small.copyWith(
                       color: tone.onSolid.withValues(alpha: 0.85),
-                      fontSize: 11,
+                      fontSize: AppType.micro,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -432,7 +432,7 @@ class _SchoolCalendarState extends State<SchoolCalendar> {
                         children: [
                           Text(
                             event.title,
-                            style: text.p.copyWith(fontWeight: FontWeight.w600),
+                            style: text.strong,
                           ),
                           if (event.venue.isNotEmpty)
                             Text(event.venue, style: text.muted),
