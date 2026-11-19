@@ -305,7 +305,7 @@ class _ClassScheduleV2ScreenState extends State<ClassScheduleV2Screen> {
         if (slot.day.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(bottom: Gap.xs),
-            child: Text(slot.day, style: text.p.copyWith(fontWeight: FontWeight.w600)),
+            child: Text(slot.day, style: text.strong),
           ),
         Wrap(
           spacing: Gap.lg,

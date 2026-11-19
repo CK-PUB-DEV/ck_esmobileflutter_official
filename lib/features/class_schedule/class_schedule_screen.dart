@@ -626,7 +626,7 @@ class _ClassRow extends StatelessWidget {
             children: [
               Text(
                 item.subject,
-                style: text.p.copyWith(fontWeight: FontWeight.w600),
+                style: text.strong,
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
               ),

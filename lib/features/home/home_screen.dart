@@ -277,7 +277,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: text.small.copyWith(
-                        fontSize: 12,
+                        fontSize: AppType.caption,
                         height: 1.25,
                         fontWeight: FontWeight.w700,
                       ),
