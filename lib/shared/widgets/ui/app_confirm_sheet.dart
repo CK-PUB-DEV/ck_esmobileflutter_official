@@ -61,6 +61,8 @@ Future<bool> showNoticeSheet(
       content: child,
       icon: icon,
       destructive: error,
+      // An error notice gets a red badge but a neutral button: dismissing it is not a risky action.
+      destructiveButton: false,
       primaryLabel: buttonLabel,
       onPrimary: () => Navigator.of(sheetContext).pop(true),
     ),
@@ -91,11 +93,15 @@ class _SheetBody extends StatelessWidget {
     required this.destructive,
     required this.primaryLabel,
     required this.onPrimary,
+    this.destructiveButton,
     this.message,
     this.content,
     this.secondaryLabel,
     this.onSecondary,
   });
+
+  /// Whether the main button is red. Defaults to [destructive].
+  final bool? destructiveButton;
 
   final String title;
   final String? message;
@@ -111,7 +117,12 @@ class _SheetBody extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
     final scheme = theme.colorScheme;
-    final accent = destructive ? scheme.destructive : scheme.primary;
+    // Red only for a destructive confirmation (log out) or an error notice. The badge is a neutral
+    // gray otherwise, and the main button stays the neutral primary unless the action is destructive.
+    final badgeColor = destructive ? scheme.destructive : scheme.foreground;
+    final badgeFill = destructive
+        ? scheme.destructive.withValues(alpha: 0.12)
+        : scheme.muted;
     final pill = ShadDecoration(
       border: ShadBorder.all(radius: BorderRadius.circular(AppRadius.pill)),
     );
@@ -140,10 +151,10 @@ class _SheetBody extends StatelessWidget {
                     width: 64,
                     height: 64,
                     decoration: BoxDecoration(
-                      color: accent.withValues(alpha: 0.12),
+                      color: badgeFill,
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(icon, size: IconSize.nav + 4, color: accent),
+                    child: Icon(icon, size: IconSize.nav + 4, color: badgeColor),
                   ),
                 ),
               ),
@@ -166,7 +177,7 @@ class _SheetBody extends StatelessWidget {
               ],
               if (content != null) ...[Gap.hLg, content!],
               Gap.hXl,
-              destructive
+              (destructiveButton ?? destructive)
                   ? ShadButton.destructive(
                       onPressed: onPrimary,
                       height: kMinTap + 8,

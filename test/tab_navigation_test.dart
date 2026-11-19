@@ -31,15 +31,45 @@ Widget _host({
 final _pill = find.byKey(const ValueKey('tab_navigation_pill'));
 
 void main() {
-  testWidgets('shows every tab and reports taps', (tester) async {
+  testWidgets('shows every tab icon and reports taps', (tester) async {
     var tapped = -1;
     await tester.pumpWidget(_host(index: 0, onChanged: (i) => tapped = i));
 
     for (final item in _items) {
-      expect(find.text(item.label), findsOneWidget);
+      expect(find.byIcon(item.icon), findsOneWidget);
     }
-    await tester.tap(find.text('Calendar'));
+    await tester.tap(find.byIcon(LucideIcons.calendarDays));
     expect(tapped, 2);
+  });
+
+  testWidgets('only the selected tab shows its label, and it follows the selection',
+      (tester) async {
+    await tester.pumpWidget(_host(index: 0, onChanged: (_) {}));
+    await tester.pumpAndSettle();
+    expect(find.text('Home'), findsOneWidget);
+    for (final other in ['Tap history', 'Calendar', 'Profile']) {
+      expect(find.text(other), findsNothing);
+    }
+
+    await tester.pumpWidget(_host(index: 2, onChanged: (_) {}));
+    await tester.pumpAndSettle();
+    expect(find.text('Calendar'), findsOneWidget);
+    expect(find.text('Home'), findsNothing);
+  });
+
+  testWidgets('labels every tab for screen readers, selected or not', (tester) async {
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(_host(index: 0, onChanged: (_) {}));
+    for (final item in _items) {
+      expect(find.bySemanticsLabel(item.label), findsOneWidget);
+    }
+    handle.dispose();
+  });
+
+  testWidgets('hides the label while collapsed', (tester) async {
+    await tester.pumpWidget(_host(index: 0, onChanged: (_) {}, collapsed: true));
+    await tester.pumpAndSettle();
+    expect(find.text('Home'), findsNothing);
   });
 
   testWidgets('fits a narrow phone at large text scale without overflow', (tester) async {

@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
@@ -514,4 +515,362 @@ class PillToggle<T> extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Row of pill chips for filtering a list or picking a day. The selected chip is filled with the
+/// school colour; the others are white pills. Scrolls sideways when the chips do not fit.
+class FilterChips<T> extends StatelessWidget {
+  const FilterChips({
+    super.key,
+    required this.options,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final List<({T value, String label})> options;
+  final T value;
+  final ValueChanged<T> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = ShadTheme.of(context);
+    final scheme = theme.colorScheme;
+    final tone = SchoolTone.current(context);
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final duration = AppMotion.of(context);
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      clipBehavior: Clip.none,
+      child: Row(
+        children: [
+          for (var i = 0; i < options.length; i++) ...[
+            if (i > 0) Gap.wSm,
+            Semantics(
+              button: true,
+              selected: options[i].value == value,
+              label: options[i].label,
+              excludeSemantics: true,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => onChanged(options[i].value),
+                child: AnimatedContainer(
+                  duration: duration,
+                  curve: Curves.easeOut,
+                  constraints: const BoxConstraints(minHeight: kMinTap, minWidth: kMinTap),
+                  padding: const EdgeInsets.symmetric(horizontal: Gap.lg),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: options[i].value == value ? tone.solid : scheme.card,
+                    borderRadius: BorderRadius.circular(AppRadius.pill),
+                    border: dark && options[i].value != value
+                        ? Border.all(color: scheme.border)
+                        : null,
+                    boxShadow: options[i].value == value
+                        ? const []
+                        : AppShadow.soft(dark),
+                  ),
+                  child: Text(
+                    options[i].label,
+                    maxLines: 1,
+                    style: theme.textTheme.small.copyWith(
+                      fontWeight: options[i].value == value
+                          ? FontWeight.w600
+                          : FontWeight.w500,
+                      color: options[i].value == value
+                          ? tone.onSolid
+                          : scheme.mutedForeground,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// One pill that sums up the filters in force (e.g. "SY 2026-2027 · 1st Semester") and opens the
+/// picker when tapped. Replaces a stack of full-width dropdowns above a screen's data.
+class ContextPill extends StatelessWidget {
+  const ContextPill({super.key, required this.label, required this.onTap, this.icon});
+
+  final String label;
+  final VoidCallback onTap;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = ShadTheme.of(context);
+    final scheme = theme.colorScheme;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Semantics(
+        button: true,
+        label: 'Change: $label',
+        excludeSemantics: true,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: Container(
+            constraints: const BoxConstraints(minHeight: kMinTap),
+            padding: const EdgeInsets.only(left: Gap.lg, right: Gap.md),
+            decoration: BoxDecoration(
+              color: scheme.card,
+              borderRadius: BorderRadius.circular(AppRadius.pill),
+              border: dark ? Border.all(color: scheme.border) : null,
+              boxShadow: AppShadow.soft(dark),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (icon != null) ...[
+                  Icon(icon, size: IconSize.inline, color: scheme.mutedForeground),
+                  Gap.wSm,
+                ],
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.smallStrong,
+                  ),
+                ),
+                Gap.wSm,
+                Icon(LucideIcons.chevronDown, size: IconSize.inline, color: scheme.mutedForeground),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Bottom sheet that holds a screen's pickers (school year, semester...) behind a [ContextPill].
+/// The sheet only hosts [child]; the screen keeps its own select widgets and state. Same look as
+/// the app's other sheets: rounded top corners, drag handle, app background.
+Future<void> showPickerSheet(
+  BuildContext context, {
+  required String title,
+  required Widget child,
+}) {
+  HapticFeedback.selectionClick();
+  return showModalBottomSheet<void>(
+    context: context,
+    useSafeArea: true,
+    showDragHandle: true,
+    isScrollControlled: true,
+    constraints: const BoxConstraints(maxWidth: 480),
+    backgroundColor: ShadTheme.of(context).colorScheme.background,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.card)),
+    ),
+    builder: (sheetContext) => SafeArea(
+      top: false,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          Gap.xl,
+          Gap.xs,
+          Gap.xl,
+          Gap.lg + MediaQuery.viewInsetsOf(sheetContext).bottom,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _SheetHeader(title: title),
+              Gap.hLg,
+              child,
+              Gap.hLg,
+              // Colours are set here, not read from the theme's primary, so Done is always the
+              // neutral ink button. Red is reserved for destructive actions.
+              ShadButton(
+                onPressed: () => Navigator.of(sheetContext).pop(),
+                height: kMinTap + 8,
+                backgroundColor: ShadTheme.of(sheetContext).colorScheme.foreground,
+                hoverBackgroundColor:
+                    ShadTheme.of(sheetContext).colorScheme.foreground.withValues(alpha: 0.9),
+                pressedBackgroundColor:
+                    ShadTheme.of(sheetContext).colorScheme.foreground.withValues(alpha: 0.85),
+                foregroundColor: ShadTheme.of(sheetContext).colorScheme.background,
+                decoration: appPillDecoration(),
+                child: const Text('Done'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+/// Sheet title with a round close button on the right.
+class _SheetHeader extends StatelessWidget {
+  const _SheetHeader({required this.title, this.subtitle});
+
+  final String title;
+  final String? subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = ShadTheme.of(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Semantics(header: true, child: Text(title, style: theme.textTheme.h4)),
+              if (subtitle != null) ...[
+                Gap.hXs,
+                Text(subtitle!, style: theme.textTheme.muted),
+              ],
+            ],
+          ),
+        ),
+        Gap.wMd,
+        Semantics(
+          button: true,
+          label: 'Close',
+          excludeSemantics: true,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => Navigator.of(context).maybePop(),
+            child: Container(
+              width: kMinTap - 8,
+              height: kMinTap - 8,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: theme.colorScheme.muted),
+              child: Icon(LucideIcons.x, size: IconSize.inline + 2, color: theme.colorScheme.foreground),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// One choice in a [showOptionSheet].
+typedef SheetOption<T> = ({T value, String label, String? hint});
+
+/// Bottom sheet for choosing one value from a list (month, school year, term...). Each option is
+/// a rounded row; the chosen one is highlighted and carries a check in a school-colour circle.
+/// Tapping an option calls [onSelected] and closes the sheet, so there is no Done button.
+Future<void> showOptionSheet<T>(
+  BuildContext context, {
+  required String title,
+  String? subtitle,
+  required List<SheetOption<T>> options,
+  required T value,
+  required ValueChanged<T> onSelected,
+}) {
+  HapticFeedback.selectionClick();
+  final screenHeight = MediaQuery.sizeOf(context).height;
+  return showModalBottomSheet<void>(
+    context: context,
+    useSafeArea: true,
+    showDragHandle: true,
+    isScrollControlled: true,
+    constraints: const BoxConstraints(maxWidth: 480),
+    backgroundColor: ShadTheme.of(context).colorScheme.background,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.card)),
+    ),
+    builder: (sheetContext) {
+      final theme = ShadTheme.of(sheetContext);
+      final scheme = theme.colorScheme;
+      final tone = SchoolTone.current(sheetContext);
+      return SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(Gap.xl, Gap.xs, Gap.xl, Gap.lg),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _SheetHeader(title: title, subtitle: subtitle),
+              Gap.hLg,
+              ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: screenHeight * 0.55),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: options.length,
+                  separatorBuilder: (_, _) => Gap.hSm,
+                  itemBuilder: (context, i) {
+                    final o = options[i];
+                    final selected = o.value == value;
+                    return Semantics(
+                      button: true,
+                      selected: selected,
+                      label: o.label,
+                      excludeSemantics: true,
+                      child: Material(
+                        color: selected ? scheme.muted : scheme.card,
+                        borderRadius: BorderRadius.circular(AppRadius.row),
+                        clipBehavior: Clip.antiAlias,
+                        child: InkWell(
+                          onTap: () {
+                            Navigator.of(sheetContext).pop();
+                            onSelected(o.value);
+                          },
+                          child: Container(
+                            constraints: const BoxConstraints(minHeight: kTapTarget + 4),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: Gap.lg,
+                              vertical: Gap.md,
+                            ),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(AppRadius.row),
+                              border: Border.all(color: scheme.border.withValues(alpha: 0.7)),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        o.label,
+                                        style: selected ? theme.textTheme.strong : theme.textTheme.p,
+                                      ),
+                                      if (o.hint != null) ...[
+                                        Gap.hXs,
+                                        Text(o.hint!, style: theme.textTheme.muted),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                                if (selected) ...[
+                                  Gap.wMd,
+                                  Container(
+                                    width: 28,
+                                    height: 28,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: tone.solid,
+                                    ),
+                                    child: Icon(LucideIcons.check, size: IconSize.inline, color: tone.onSolid),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
 }
