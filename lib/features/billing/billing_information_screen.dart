@@ -88,18 +88,12 @@ class BillingInformationState extends State<BillingInformationPage> {
 
   void _showError(String message) {
     if (!mounted) return;
-    showShadDialog(
-      context: context,
-      builder: (context) => ShadDialog.alert(
-        title: const Text('Error'),
-        description: Text(message),
-        actions: [
-          ShadButton(
-            child: const Text('OK'),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-        ],
-      ),
+    showNoticeSheet(
+      context,
+      title: 'Error',
+      message: message,
+      icon: LucideIcons.circleAlert,
+      error: true,
     );
   }
 
