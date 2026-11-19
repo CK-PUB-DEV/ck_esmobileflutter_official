@@ -571,6 +571,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _logout(BuildContext context) async {
+    final confirmed = await showConfirmSheet(
+      context,
+      title: 'Log out?',
+      message: 'You will need to sign in again to see your grades, taps and alerts.',
+      confirmLabel: 'Log out',
+      cancelLabel: 'Stay signed in',
+      icon: LucideIcons.logOut,
+      destructive: true,
+    );
+    if (!confirmed || !context.mounted) return;
+
     final prefs = await SharedPreferences.getInstance();
     final userJson = prefs.getString('user');
     final userLoginJson = prefs.getString('userlogin');
