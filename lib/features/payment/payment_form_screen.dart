@@ -42,6 +42,9 @@ class _PaymentFormState extends State<PaymentForm> {
   // start over from empty.
   int _resetCount = 0;
 
+  static const _requiredFieldsMessage = 'Please fill in all required fields.';
+  static const _duplicateRefMessage = 'Reference number already exists.';
+
   final List<String> _messageReceiverOptions = [
     'Student',
     'Mother',
@@ -255,7 +258,7 @@ class _PaymentFormState extends State<PaymentForm> {
         _paymentAmountController.text.isEmpty ||
         _messageReceiverController.text.isEmpty ||
         _contactNumberController.text.isEmpty) {
-      _toast('Please fill in all required fields.', error: true);
+      _toast(_requiredFieldsMessage, error: true);
       return;
     }
 
@@ -303,7 +306,7 @@ class _PaymentFormState extends State<PaymentForm> {
 
           if (responseData['status'] == 0 &&
               responseData['message'] == 'Reference Number already exists') {
-            _toast('Reference number already exists.', error: true);
+            _toast(_duplicateRefMessage, error: true);
           } else {
             _toast('Payment submitted successfully!');
             _clearForm();
@@ -335,7 +338,7 @@ class _PaymentFormState extends State<PaymentForm> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: text.small.copyWith(fontWeight: FontWeight.w500)),
+          Text(label, style: text.smallStrong),
           Gap.hSm,
           control,
         ],
@@ -345,22 +348,13 @@ class _PaymentFormState extends State<PaymentForm> {
 
   // A group of related fields on one rounded card, titled like the profile sections.
   Widget _section(String title, IconData icon, List<Widget> children) {
-    final text = ShadTheme.of(context).textTheme;
-    final scheme = ShadTheme.of(context).colorScheme;
     return RoundedCard(
       radius: AppRadius.row,
       padding: const EdgeInsets.fromLTRB(Gap.lg, Gap.lg, Gap.lg, Gap.sm),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(icon, size: IconSize.row, color: scheme.foreground),
-              Gap.wSm,
-              Expanded(child: Text(title, style: text.large)),
-            ],
-          ),
-          Gap.hLg,
+          SectionHeader(title, topGap: false),
           ...children,
         ],
       ),
@@ -377,7 +371,6 @@ class _PaymentFormState extends State<PaymentForm> {
     if (loading) {
       return const AppPage(title: 'Online payment form', body: LoadingSkeleton());
     }
-    final theme = ShadTheme.of(context);
     final hasReceipt = _receiptImageBytes != null;
 
     return AppPage(

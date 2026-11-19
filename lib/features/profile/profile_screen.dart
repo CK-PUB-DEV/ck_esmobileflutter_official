@@ -436,11 +436,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
   }
 
-  /// Returns the level name of the student's latest enrollment info or 'Not Available'
+  /// Returns the level name of the student's latest enrollment info or 'Not provided'
   /// if there is no enrolled student info.
   String _getGradeLevel() {
     final latestInfo = getSelectedEnrolledStud();
-    return latestInfo?.levelname ?? 'Not Available';
+    return latestInfo?.levelname ?? 'Not provided';
   }
 
   String _getStrand() {
@@ -544,9 +544,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 children: [
                   Text(
                     title,
-                    style: theme.textTheme.p.copyWith(
-                      fontWeight: FontWeight.w500,
-                    ),
+                    style: theme.textTheme.strong,
                   ),
                   Gap.hXs,
                   Text(subtitle, style: theme.textTheme.muted),

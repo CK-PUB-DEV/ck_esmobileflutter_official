@@ -468,6 +468,50 @@ class _ReportCardScreenState extends State<ReportCardScreen> {
     return sem == null ? 'SY $year' : 'SY $year · $sem';
   }
 
+  void _openPeriodPicker() {
+    showPickerSheet(
+      context,
+      title: 'School year and semester',
+      child: StatefulBuilder(
+        builder: (sheetContext, setSheetState) => Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _FieldSelect(
+              label: 'School year',
+              value: selectedYear.isNotEmpty ? selectedYear : null,
+              options: [for (final y in schoolYear) (y.id.toString(), y.sydesc)],
+              onChanged: (v) {
+                _onYearChanged(v);
+                setSheetState(() {});
+              },
+            ),
+            if (gradelevel >= 14 && gradelevel != 16) ...[
+              Gap.hMd,
+              _FieldSelect(
+                label: 'Semester',
+                value: selectedSem.isNotEmpty ? selectedSem : null,
+                options: [for (final s in schoolSem) (s.id.toString(), s.semester)],
+                onChanged: (v) {
+                  _onSemChanged(v);
+                  setSheetState(() {});
+                },
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHero() {
+    final count = concatenatedArray.length;
+    return HeroCard(
+      label: 'Report card',
+      icon: LucideIcons.graduationCap,
+      value: '$count subject${count == 1 ? '' : 's'}',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return AppPage(
@@ -487,35 +531,14 @@ class _ReportCardScreenState extends State<ReportCardScreen> {
               padding: const EdgeInsets.fromLTRB(Gap.lg, Gap.sm, Gap.lg, Gap.xl),
               children: [
                 if (concatenatedArray.isNotEmpty && (_isCollege || _tab == 'grades'))
-                  HeroCard(
-                    label: 'Report card',
-                    icon: LucideIcons.graduationCap,
-                    value: '${concatenatedArray.length} subject${concatenatedArray.length == 1 ? '' : 's'}',
-                    pill: _heroPill(),
+                  _buildHero(),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: ContextPill(
+                    label: _heroPill() ?? 'Select school year',
+                    icon: LucideIcons.calendarDays,
+                    onTap: _openPeriodPicker,
                   ),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: _FieldSelect(
-                        label: 'School year',
-                        value: selectedYear.isNotEmpty ? selectedYear : null,
-                        options: [for (final y in schoolYear) (y.id.toString(), y.sydesc)],
-                        onChanged: _onYearChanged,
-                      ),
-                    ),
-                    if (gradelevel >= 14 && gradelevel != 16) ...[
-                      Gap.wMd,
-                      Expanded(
-                        child: _FieldSelect(
-                          label: 'Semester',
-                          value: selectedSem.isNotEmpty ? selectedSem : null,
-                          options: [for (final s in schoolSem) (s.id.toString(), s.semester)],
-                          onChanged: _onSemChanged,
-                        ),
-                      ),
-                    ],
-                  ],
                 ),
                 Gap.hLg,
                 if (_isCollege)
@@ -560,14 +583,54 @@ class _ReportCardScreenState extends State<ReportCardScreen> {
         ),
       ];
     }
-    return [for (final grade in concatenatedArray) _buildSubjectCard(grade)];
+    final rows = [for (final grade in concatenatedArray) (grade: grade, data: _subjectData(grade))];
+    final headers = rows.first.data.cells.map((c) => c.label).toList();
+    final hasSummaries = rows.any((r) => r.data.summaries.isNotEmpty);
+    return [
+      if (headers.isNotEmpty)
+        AppCard(
+          padding: const EdgeInsets.symmetric(horizontal: Gap.md, vertical: Gap.md),
+          child: _GradeTable(
+            headers: headers,
+            rows: [
+              for (final r in rows)
+                _TableRowData(
+                  title: r.grade.subjdesc,
+                  values: [for (final c in r.data.cells) c.value],
+                ),
+            ],
+          ),
+        ),
+      if (hasSummaries) ...[
+        const SectionHeader('Final ratings'),
+        for (final r in rows)
+          for (final s in r.data.summaries) _finalRatingRow(r.grade, s),
+      ],
+    ];
+  }
+
+  Widget _finalRatingRow(Grades grade, _Summary summary) {
+    final hasValue = summary.value.trim().isNotEmpty;
+    final label = summary.label;
+    final tail = hasValue ? '$label ${summary.value.trim()}' : '$label —';
+    final subtitle = grade.subjcode.isEmpty ? tail : '${grade.subjcode} · $tail';
+    return ListRow(
+      title: grade.subjdesc,
+      subtitle: subtitle,
+      trailing: summary.remark.isEmpty
+          ? null
+          : StatusBadge(
+              summary.remark,
+              status: summary.remark == 'PASSED' ? AppStatus.success : AppStatus.danger,
+            ),
+    );
   }
 
   /// A period value is shown only once it has been released (status 4).
   String _period(String value, String status) =>
       value != 'null' && status == '4' ? value : '';
 
-  Widget _buildSubjectCard(Grades grade) {
+  ({List<_Cell> cells, List<_Summary> summaries}) _subjectData(Grades grade) {
     final cells = <_Cell>[];
     final summaries = <_Summary>[];
 
@@ -650,12 +713,7 @@ class _ReportCardScreenState extends State<ReportCardScreen> {
       );
     }
 
-    return _SubjectCard(
-      code: grade.subjcode,
-      title: grade.subjdesc,
-      cells: cells,
-      summaries: summaries,
-    );
+    return (cells: cells, summaries: summaries);
   }
 
   // ---------------------------------------------------------------------------
@@ -744,33 +802,36 @@ class _ReportCardScreenState extends State<ReportCardScreen> {
           .value;
     }
 
-    return [
-      for (final setup in _setup)
-        Builder(
-          builder: (context) {
-            final observed = _studentObservedValues.firstWhere(
-              (obs) => obs.gsdid == setup.id,
-              orElse: () => StudentObservedValues(
-                gsdid: setup.id,
-                q1eval: 0,
-                q2eval: 0,
-                q3eval: 0,
-                q4eval: 0,
-              ),
-            );
-            return _SubjectCard(
-              code: '',
-              title: setup.description,
-              cells: [
-                _Cell('Q1', ratingValue(observed.q1eval)),
-                _Cell('Q2', ratingValue(observed.q2eval)),
-                _Cell('Q3', ratingValue(observed.q3eval)),
-                _Cell('Q4', ratingValue(observed.q4eval)),
-              ],
-              summaries: const [],
-            );
-          },
+    _TableRowData rowFor(Setup setup) {
+      final observed = _studentObservedValues.firstWhere(
+        (obs) => obs.gsdid == setup.id,
+        orElse: () => StudentObservedValues(
+          gsdid: setup.id,
+          q1eval: 0,
+          q2eval: 0,
+          q3eval: 0,
+          q4eval: 0,
         ),
+      );
+      return _TableRowData(
+        title: setup.description,
+        values: [
+          ratingValue(observed.q1eval),
+          ratingValue(observed.q2eval),
+          ratingValue(observed.q3eval),
+          ratingValue(observed.q4eval),
+        ],
+      );
+    }
+
+    return [
+      AppCard(
+        padding: const EdgeInsets.symmetric(horizontal: Gap.md, vertical: Gap.md),
+        child: _GradeTable(
+          headers: const ['Q1', 'Q2', 'Q3', 'Q4'],
+          rows: [for (final setup in _setup) rowFor(setup)],
+        ),
+      ),
     ];
   }
 }
@@ -788,127 +849,79 @@ class _Summary {
   final String remark;
 }
 
-/// One subject (or core value): code and title, a grid of period grades, then the final
-/// rating with its remark. Wraps to the card width, never scrolls sideways.
-class _SubjectCard extends StatelessWidget {
-  const _SubjectCard({
-    required this.code,
-    required this.title,
-    required this.cells,
-    required this.summaries,
-  });
-
-  final String code;
+class _TableRowData {
+  const _TableRowData({required this.title, required this.values});
   final String title;
-  final List<_Cell> cells;
-  final List<_Summary> summaries;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = ShadTheme.of(context);
-    final text = theme.textTheme;
-    return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (code.isNotEmpty) Text(code, style: text.muted),
-          Text(
-            title,
-            style: text.strong,
-            maxLines: 4,
-            overflow: TextOverflow.ellipsis,
-          ),
-          if (cells.isNotEmpty) ...[
-            Gap.hMd,
-            Row(
-              children: [
-                for (var i = 0; i < cells.length; i++) ...[
-                  if (i > 0) Gap.wSm,
-                  Expanded(child: _GradeCell(cell: cells[i])),
-                ],
-              ],
-            ),
-          ],
-          for (final summary in summaries) ...[
-            Gap.hMd,
-            Divider(height: 1, color: theme.colorScheme.border),
-            Gap.hMd,
-            Row(
-              children: [
-                Expanded(
-                  child: Text(summary.label, style: text.muted),
-                ),
-                Gap.wSm,
-                if (summary.value.isEmpty)
-                  Text(
-                    '—',
-                    style: text.h4.copyWith(color: theme.colorScheme.mutedForeground),
-                  )
-                else
-                  // The grade sits on a filled school-colour block, like the date blocks elsewhere.
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: Gap.md, vertical: Gap.xs),
-                    decoration: BoxDecoration(
-                      color: SchoolTone.current(context).solid,
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Text(
-                      summary.value,
-                      style: text.h4.copyWith(color: SchoolTone.current(context).onSolid),
-                    ),
-                  ),
-                if (summary.remark.isNotEmpty) ...[
-                  Gap.wSm,
-                  StatusBadge(
-                    summary.remark,
-                    status: summary.remark == 'PASSED' ? AppStatus.success : AppStatus.danger,
-                  ),
-                ],
-              ],
-            ),
-          ],
-        ],
-      ),
-    );
-  }
+  final List<String> values;
 }
 
-class _GradeCell extends StatelessWidget {
-  const _GradeCell({required this.cell});
+const _tabular = [FontFeature.tabularFigures()];
 
-  final _Cell cell;
+/// Subjects (or core values) as rows, one column per period, in a single card. Fits the card
+/// width, never scrolls sideways.
+class _GradeTable extends StatelessWidget {
+  const _GradeTable({required this.headers, required this.rows});
+
+  final List<String> headers;
+  final List<_TableRowData> rows;
+
+  static const _subjectFlex = 5;
+  static const _periodFlex = 2;
 
   @override
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
     final text = theme.textTheme;
-    final empty = cell.value.trim().isEmpty;
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: Gap.sm, horizontal: Gap.xs),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.muted,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(cell.label, style: text.muted),
-          ),
-          Gap.hXs,
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              empty ? '—' : cell.value.trim(),
-              style: text.p.copyWith(
-                fontWeight: FontWeight.w600,
-                color: empty ? theme.colorScheme.mutedForeground : theme.colorScheme.foreground,
+    Widget period(Widget child) => Expanded(
+      flex: _periodFlex,
+      child: Align(alignment: Alignment.centerRight, child: child),
+    );
+
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(flex: _subjectFlex, child: Text('Subject', style: text.muted)),
+            for (final h in headers)
+              period(FittedBox(fit: BoxFit.scaleDown, child: Text(h, style: text.muted))),
+          ],
+        ),
+        for (final row in rows) ...[
+          Divider(height: Gap.lg, color: theme.colorScheme.border),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                flex: _subjectFlex,
+                child: Padding(
+                  padding: const EdgeInsets.only(right: Gap.sm),
+                  child: Text(
+                    row.title,
+                    style: text.strong,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ),
-            ),
+              for (final v in row.values)
+                period(
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      v.trim().isEmpty ? '—' : v.trim(),
+                      style: text.p.copyWith(
+                        fontFeatures: _tabular,
+                        color: v.trim().isEmpty
+                            ? theme.colorScheme.mutedForeground
+                            : theme.colorScheme.foreground,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ],
-      ),
+      ],
     );
   }
 }
@@ -933,9 +946,10 @@ class _AttendanceRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = ShadTheme.of(context).textTheme;
-    final style = header
+    final base = header
         ? text.muted
         : (bold ? text.strong : text.p);
+    final style = base.copyWith(fontFeatures: _tabular);
     Widget cell(String value, int flex, {TextAlign align = TextAlign.end}) => Expanded(
       flex: flex,
       child: Text(value, style: style, textAlign: align, maxLines: 2, overflow: TextOverflow.ellipsis),

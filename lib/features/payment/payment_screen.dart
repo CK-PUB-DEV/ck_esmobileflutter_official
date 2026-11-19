@@ -268,29 +268,31 @@ class PaymentPageState extends State<PaymentPage> {
           }
         },
         children: [
-          ShadSelect<String>(
-            // Rebuilt once the years arrive, so it opens on the current school year.
-            key: ValueKey('years-${schoolYear.length}'),
-            placeholder: const Text('Select school year'),
-            initialValue: selectedYear,
-            options: [
-              const ShadOption(value: '0', child: Text('All school years')),
-              for (final option in schoolYear.reversed)
-                ShadOption(value: option.id.toString(), child: Text(option.sydesc)),
-            ],
-            selectedOptionBuilder: (context, value) => Text(_yearLabel(value)),
-            onChanged: (value) {
-              if (value == null) return;
-              setState(() {
-                selectedYear = value;
-                syid = int.parse(value);
-                semFilter = 0;
-                _applyFilters();
-              });
-            },
+          ContextPill(
+            icon: LucideIcons.calendar,
+            label: _yearLabel(selectedYear),
+            onTap: () => showOptionSheet<String>(
+              context,
+              title: 'School year',
+              subtitle: 'Show payments for one school year',
+              value: selectedYear,
+              options: [
+                (value: '0', label: 'All school years', hint: null),
+                for (final option in schoolYear.reversed)
+                  (value: option.id.toString(), label: option.sydesc, hint: null),
+              ],
+              onSelected: (value) {
+                setState(() {
+                  selectedYear = value;
+                  syid = int.parse(value);
+                  semFilter = 0;
+                  _applyFilters();
+                });
+              },
+            ),
           ),
           if (_semestersInYear.length > 1) ...[
-            Gap.hSm,
+            Gap.hMd,
             PillToggle<int>(
               value: semFilter,
               options: [
@@ -380,62 +382,26 @@ class PaymentPageState extends State<PaymentPage> {
         )
       else
         for (final payment in payments)
-          AppCard(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          ListRow(
+            leading: _leading(
+              payment.description == 'BANK'
+                  ? Icon(LucideIcons.landmark, size: IconSize.row, color: theme.colorScheme.foreground)
+                  : Image.asset(
+                      payment.description == 'GCASH' ? 'assets/gcash.jpg' : 'assets/palawan.png',
+                      height: 44,
+                      width: 44,
+                      fit: BoxFit.cover,
+                    ),
+            ),
+            title: payment.description,
+            subtitle: '${Fmt.date(DateTime.parse(payment.paymentDate))} · Ref. no. ${payment.refNum}',
+            trailing: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                _leading(
-                  payment.description == 'BANK'
-                      ? Icon(LucideIcons.landmark, size: IconSize.row, color: theme.colorScheme.foreground)
-                      : Image.asset(
-                          payment.description == 'GCASH' ? 'assets/gcash.jpg' : 'assets/palawan.png',
-                          height: 44,
-                          width: 44,
-                          fit: BoxFit.cover,
-                        ),
-                ),
-                Gap.wMd,
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(Fmt.date(DateTime.parse(payment.paymentDate)), style: text.muted),
-                      Gap.hXs,
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              payment.description,
-                              style: text.strong,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          Gap.wSm,
-                          Text(
-                            Fmt.money(double.parse(payment.amount)),
-                            style: text.strong,
-                          ),
-                        ],
-                      ),
-                      Gap.hSm,
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              'Ref. no. ${payment.refNum}',
-                              style: text.small,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          Gap.wSm,
-                          StatusBadge(payment.getStatus(), status: _statusTone(payment.getStatus())),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
+                Text(Fmt.money(double.parse(payment.amount)), style: text.strong),
+                Gap.hXs,
+                StatusBadge(payment.getStatus(), status: _statusTone(payment.getStatus())),
               ],
             ),
           ),
@@ -520,17 +486,7 @@ class PaymentPageState extends State<PaymentPage> {
             ],
           ),
         ),
-        AppCard(
-          padding: EdgeInsets.zero,
-          child: Column(
-            children: [
-              for (var i = 0; i < entry.value.length; i++) ...[
-                if (i > 0) Divider(height: 1, color: theme.colorScheme.border),
-                _transactionRow(entry.value[i], amountOf(entry.value[i])),
-              ],
-            ],
-          ),
-        ),
+        for (final t in entry.value) _transactionRow(t, amountOf(t)),
       ],
     ];
   }
@@ -548,24 +504,10 @@ class PaymentPageState extends State<PaymentPage> {
       if (t.ornum.trim().isNotEmpty) 'OR ${t.ornum.trim()}',
       Fmt.date(t.transdate),
     ].join(' · ');
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: Gap.lg, vertical: Gap.md),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: text.strong),
-                Gap.hXs,
-                Text(details, style: text.muted, maxLines: 1, overflow: TextOverflow.ellipsis),
-              ],
-            ),
-          ),
-          Gap.wSm,
-          Text(Fmt.money(amount), style: text.strong),
-        ],
-      ),
+    return ListRow(
+      title: title,
+      subtitle: details,
+      trailing: Text(Fmt.money(amount), style: text.strong),
     );
   }
 }
