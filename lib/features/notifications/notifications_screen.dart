@@ -115,8 +115,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 if (message.title.isNotEmpty) ...[
                   Text(
                     message.title,
-                    style: text.p.copyWith(
-                      fontWeight: FontWeight.w600,
+                    style: text.strong.copyWith(
                       color: unread ? null : theme.colorScheme.mutedForeground,
                     ),
                   ),

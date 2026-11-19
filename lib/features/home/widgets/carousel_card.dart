@@ -298,9 +298,8 @@ class _CarouselCardState extends State<CarouselCard> {
                   Icon(LucideIcons.wallet, color: onSolid, size: IconSize.row),
                   Text(
                     'Current balance',
-                    style: text.small.copyWith(
+                    style: text.smallStrong.copyWith(
                       color: onSolid.withValues(alpha: 0.85),
-                      fontWeight: FontWeight.w600,
                     ),
                   ),
                   if (syDesc.isNotEmpty)

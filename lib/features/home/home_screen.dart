@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pushtrial/models/user.dart';
 import 'package:pushtrial/features/home/widgets/carousel_card.dart';
 import 'package:pushtrial/core/services/message_read_store.dart';
+import 'package:pushtrial/core/services/student_services.dart';
 import 'package:pushtrial/core/services/messages_repository.dart';
 import 'package:pushtrial/models/user_data.dart';
 import 'package:pushtrial/models/login.dart';
@@ -37,16 +38,21 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final List<Map<String, dynamic>> features = [
-    {'icon': LucideIcons.calendarClock, 'label': 'Class schedule'},
-    {'icon': LucideIcons.graduationCap, 'label': 'Report card'},
-    {'icon': LucideIcons.receipt, 'label': 'Billing information'},
-    {'icon': LucideIcons.fileCheck, 'label': 'Clearance'},
-    {'icon': LucideIcons.arrowLeftRight, 'label': 'Payment transactions'},
-    {'icon': LucideIcons.award, 'label': 'Scholarship request'},
-    {'icon': LucideIcons.clipboardList, 'label': 'Teacher evaluation'},
-    {'icon': LucideIcons.school, 'label': 'Enrollment'},
+  /// Home services in the order the screens are opened (see [_openFeature]). `group` feeds the
+  /// filter chips; `service` is the key in the school's `services` answer, when it has one.
+  final List<_Feature> features = const [
+    _Feature(LucideIcons.calendarClock, 'Class schedule', 'Subjects, teachers and rooms', _Group.academics),
+    _Feature(LucideIcons.graduationCap, 'Report card', 'Grades, attendance and core values', _Group.academics),
+    _Feature(LucideIcons.receipt, 'Billing information', 'Balance and what is due', _Group.money),
+    _Feature(LucideIcons.fileCheck, 'Clearance', 'Clearance status', _Group.campus, service: 'clearance'),
+    _Feature(LucideIcons.arrowLeftRight, 'Payment transactions', 'Payments you made and uploaded', _Group.money),
+    _Feature(LucideIcons.award, 'Scholarship request', 'Scholarship status', _Group.money, service: 'scholarship'),
+    _Feature(LucideIcons.clipboardList, 'Teacher evaluation', 'Rate your teachers', _Group.academics),
+    _Feature(LucideIcons.school, 'Enrollment', 'Your enrollment record', _Group.campus),
   ];
+
+  _Group? _group;
+  StudentServices? _services;
 
   int _carouselRefreshKey = 0;
   int _notificationCount = 0;
@@ -91,6 +97,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
     _checkAndNotifyFuture = _initializeData();
     _initializeData();
+    StudentServices.load().then((services) {
+      if (mounted) setState(() => _services = services);
+    });
   }
 
   Future<void> _initializeData() async {
@@ -218,77 +227,83 @@ class _HomeScreenState extends State<HomeScreen> {
           schoolColor: schoolColor,
         ),
         Padding(
-          padding: const EdgeInsets.only(top: Gap.xl, bottom: Gap.lg),
+          padding: const EdgeInsets.only(top: Gap.xl, bottom: Gap.md),
           child: Row(
             children: [
               AccentBar(tone),
               Gap.wSm,
-              Text('Features', style: text.large),
+              Text('Services', style: text.large),
             ],
           ),
         ),
-        GridView.builder(
-          physics: const NeverScrollableScrollPhysics(),
-          shrinkWrap: true,
-          itemCount: features.length,
-          // A fixed tile height that grows with the text size, so two-line labels never overflow.
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3,
-            mainAxisSpacing: Gap.md,
-            crossAxisSpacing: Gap.md,
-            mainAxisExtent: 112 + (MediaQuery.textScalerOf(context).scale(1) - 1).clamp(0.0, 1.5) * 64,
-          ),
-          itemBuilder: (context, index) {
-            final feature = features[index];
-            final label = feature['label'] as String;
-            // Tall rounded tile: a round icon well on top, the label under it.
-            return Semantics(
-              button: true,
-              label: label,
-              excludeSemantics: true,
-              child: RoundedCard(
-                radius: 24,
-                margin: EdgeInsets.zero,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: Gap.xs,
-                  vertical: Gap.md,
-                ),
-                onTap: () => _openFeature(index),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: scheme.muted,
-                      ),
-                      child: Icon(
-                        feature['icon'] as IconData,
-                        size: IconSize.row + 2,
-                        color: scheme.foreground,
-                      ),
-                    ),
-                    Gap.hSm,
-                    Text(
-                      label,
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: text.small.copyWith(
-                        fontSize: AppType.caption,
-                        height: 1.25,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
+        FilterChips<_Group?>(
+          options: [
+            (value: null, label: 'All'),
+            for (final g in _Group.values) (value: g, label: g.label),
+          ],
+          value: _group,
+          onChanged: (g) => setState(() => _group = g),
         ),
+        Gap.hMd,
+        for (final i in _indexes(live: true)) _serviceRow(i, scheme),
+        if (_indexes(live: false).isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.only(top: Gap.lg, bottom: Gap.md),
+            child: Row(
+              children: [
+                AccentBar(tone),
+                Gap.wSm,
+                Text('Coming soon to the app', style: text.large),
+              ],
+            ),
+          ),
+          for (final i in _indexes(live: false)) _serviceRow(i, scheme),
+        ],
       ],
+    );
+  }
+
+  /// Indexes into [features] for the selected chip. A service the school does not use is left out;
+  /// one the school uses on the portal (or whose state is unknown) goes under "Coming soon", because
+  /// the app cannot show it yet.
+  List<int> _indexes({required bool live}) {
+    final result = <int>[];
+    for (var i = 0; i < features.length; i++) {
+      final f = features[i];
+      if (_group != null && f.group != _group) continue;
+      final services = _services;
+      // While the school's answer is loading, a service-backed row waits instead of flashing.
+      if (f.service != null && services == null) continue;
+      final state = f.service == null ? ServiceState.available : services![f.service!];
+      if (state == ServiceState.notUsed) continue;
+      // Only a service the school says is coming soon is "Soon". An unknown answer (older server,
+      // offline) stays a normal row, as before, because its screen explains the state when opened.
+      if ((state != ServiceState.comingSoon) == live) result.add(i);
+    }
+    return result;
+  }
+
+  Widget _serviceRow(int index, ShadColorScheme scheme) {
+    final f = features[index];
+    final soon = f.service != null && _services?[f.service!] == ServiceState.comingSoon;
+    return Semantics(
+      button: true,
+      label: f.label,
+      excludeSemantics: true,
+      child: ListRow(
+        title: f.label,
+        subtitle: f.hint,
+        leading: Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(shape: BoxShape.circle, color: scheme.muted),
+          child: Icon(f.icon, size: IconSize.row + 2, color: scheme.foreground),
+        ),
+        trailing: soon
+            ? const StatusBadge('Soon')
+            : Icon(LucideIcons.chevronRight, size: IconSize.row, color: scheme.mutedForeground),
+        onTap: () => _openFeature(index),
+      ),
     );
   }
 
@@ -329,6 +344,25 @@ class _HomeScreenState extends State<HomeScreen> {
     if (page == null) return;
     Navigator.push(context, MaterialPageRoute(builder: (_) => page!));
   }
+}
+
+enum _Group {
+  academics('Academics'),
+  money('Money'),
+  campus('Campus');
+
+  const _Group(this.label);
+  final String label;
+}
+
+class _Feature {
+  const _Feature(this.icon, this.label, this.hint, this.group, {this.service});
+
+  final IconData icon;
+  final String label;
+  final String hint;
+  final _Group group;
+  final String? service;
 }
 
 /// Bell with an unread count; the whole thing is a 44px touch target.
