@@ -1,3 +1,4 @@
+import 'package:pushtrial/core/config/app_transitions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -74,6 +75,7 @@ Future<bool?> _openSheet(BuildContext context, WidgetBuilder builder) {
   HapticFeedback.selectionClick();
   return showModalBottomSheet<bool>(
     context: context,
+    sheetAnimationStyle: AppTransitions.sheet,
     useSafeArea: true,
     showDragHandle: true,
     isScrollControlled: true,

@@ -1,3 +1,4 @@
+import 'package:pushtrial/core/config/app_transitions.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -68,7 +69,7 @@ class _TeacherEvaluationScreenState extends State<TeacherEvaluationScreen> {
   Future<void> _open(EvaluationClass item) async {
     final data = _data!;
     final submitted = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
+      AppRoute(
         builder: (_) => TeacherEvaluationFormScreen(
           item: item,
           form: data.form!,

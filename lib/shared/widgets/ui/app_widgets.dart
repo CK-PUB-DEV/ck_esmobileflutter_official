@@ -1,3 +1,4 @@
+import 'package:pushtrial/core/config/app_transitions.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -661,6 +662,7 @@ Future<void> showPickerSheet(
   HapticFeedback.selectionClick();
   return showModalBottomSheet<void>(
     context: context,
+    sheetAnimationStyle: AppTransitions.sheet,
     useSafeArea: true,
     showDragHandle: true,
     isScrollControlled: true,
@@ -773,6 +775,7 @@ Future<void> showOptionSheet<T>(
   final screenHeight = MediaQuery.sizeOf(context).height;
   return showModalBottomSheet<void>(
     context: context,
+    sheetAnimationStyle: AppTransitions.sheet,
     useSafeArea: true,
     showDragHandle: true,
     isScrollControlled: true,
