@@ -1,3 +1,4 @@
+import 'package:pushtrial/core/config/app_transitions.dart';
 import 'package:pushtrial/core/api/api_version.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -214,7 +215,7 @@ class _HomeScreenState extends State<HomeScreen> {
           onTap: () async {
             await Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => NotificationsScreen()),
+              AppRoute(builder: (_) => NotificationsScreen()),
             );
             // Whatever was just viewed is now read on this phone.
             if (mounted) getSMSBunker();
@@ -342,7 +343,7 @@ class _HomeScreenState extends State<HomeScreen> {
         page = null;
     }
     if (page == null) return;
-    Navigator.push(context, MaterialPageRoute(builder: (_) => page!));
+    Navigator.push(context, AppRoute(builder: (_) => page!));
   }
 }
 

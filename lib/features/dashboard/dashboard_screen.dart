@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pushtrial/models/user.dart';
+import 'package:pushtrial/core/config/app_transitions.dart';
 import 'package:pushtrial/core/services/firebase_push.dart';
 import 'package:pushtrial/core/services/school_alerts.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -152,7 +153,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: SafeArea(
             top: false,
             bottom: false,
-            child: IndexedStack(index: _selectedIndex, children: _pages),
+            child: TabFade(
+              index: _selectedIndex,
+              child: IndexedStack(index: _selectedIndex, children: _pages),
+            ),
           ),
         ),
         bottomNavigationBar: TabNavigation(
