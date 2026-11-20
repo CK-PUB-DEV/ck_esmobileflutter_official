@@ -1,3 +1,4 @@
+import 'package:pushtrial/core/config/app_transitions.dart';
 import 'package:flutter/material.dart';
 import 'package:pushtrial/features/payment/payment_form_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -368,7 +369,7 @@ class PaymentPageState extends State<PaymentPage> {
         onPressed: () {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (context) => PaymentForm()),
+            AppRoute(builder: (context) => PaymentForm()),
           );
         },
         child: const Text('Upload payment'),

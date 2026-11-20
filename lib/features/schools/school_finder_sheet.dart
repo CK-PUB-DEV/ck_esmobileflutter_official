@@ -1,3 +1,4 @@
+import 'package:pushtrial/core/config/app_transitions.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -15,6 +16,7 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 Future<School?> showSchoolFinder(BuildContext context) {
   return showModalBottomSheet<School>(
     context: context,
+    sheetAnimationStyle: AppTransitions.sheet,
     isScrollControlled: true,
     useSafeArea: true,
     showDragHandle: true,

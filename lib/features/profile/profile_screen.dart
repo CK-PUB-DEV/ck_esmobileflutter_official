@@ -1,3 +1,4 @@
+import 'package:pushtrial/core/config/app_transitions.dart';
 import 'package:pushtrial/core/api/auth_token.dart';
 import 'package:flutter/material.dart';
 import 'package:pushtrial/models/user_login.dart';
@@ -603,7 +604,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (context.mounted) {
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (context) => const LoginScreen()),
+        AppRoute(builder: (context) => const LoginScreen()),
         (route) => false,
       );
     }
