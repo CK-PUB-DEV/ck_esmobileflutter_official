@@ -38,6 +38,18 @@ class SchoolMatcher {
   static String normalize(String value) =>
       value.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
 
+  /// Same rules for schools the server has already filtered: an exact code is shown alone and at
+  /// most [maxResults] come back, whatever the server sent.
+  static SchoolMatches fromServer(List<School> schools, String query) {
+    if (schools.isEmpty) return const SchoolMatches(SchoolMatchKind.none);
+    final q = normalize(query);
+    final exact = schools.where((s) => normalize(s.schoolabrv) == q).toList();
+    if (exact.isNotEmpty) {
+      return SchoolMatches(SchoolMatchKind.exactCode, [exact.first]);
+    }
+    return SchoolMatches(SchoolMatchKind.results, schools.take(maxResults).toList());
+  }
+
   static SchoolMatches find(List<School> schools, String query) {
     final q = normalize(query);
     if (q.length < minCodeLength) return const SchoolMatches(SchoolMatchKind.idle);
