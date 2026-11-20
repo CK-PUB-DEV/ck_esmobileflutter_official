@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -33,68 +34,109 @@ class _SchoolFinderSheet extends StatefulWidget {
 }
 
 class _SchoolFinderSheetState extends State<_SchoolFinderSheet> {
-  /// Kept for the run, so reopening the sheet is instant. Only used to match what is typed; it is
-  /// never drawn as a list.
-  static List<School>? _cache;
+  /// The whole directory, held only when it has to be: a test build, or a directory server that
+  /// has no search yet (it answers 404). Null means every lookup asks the server, which sends back
+  /// at most five schools, so the phone never holds the full list.
+  static List<School>? _localList;
 
   final _search = TextEditingController();
   final String _host = SchoolApi().getImage();
-  List<School> _schools = [];
   SchoolMatches _matches = const SchoolMatches(SchoolMatchKind.idle);
-  bool _loading = true;
+  bool _loading = false;
   bool _loadFailed = false;
+  Timer? _debounce;
+
+  /// Only the newest lookup may change the screen, so a slow answer never replaces a newer one.
+  int _lookupId = 0;
 
   @override
   void initState() {
     super.initState();
     _search.addListener(_onChanged);
-    _load();
   }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _search.dispose();
     super.dispose();
   }
 
-  Future<void> _load({bool force = false}) async {
-    final cached = _cache;
-    if (cached != null && !force) {
-      _schools = cached;
-      _loading = false;
+  void _onChanged() {
+    _debounce?.cancel();
+    final enough = SchoolMatcher.normalize(_search.text).length >=
+        SchoolMatcher.minCodeLength;
+    if (!enough) {
+      _lookupId++;
+      setState(() {
+        _matches = const SchoolMatches(SchoolMatchKind.idle);
+        _loading = false;
+        _loadFailed = false;
+      });
       return;
     }
-    setState(() {
-      _loading = true;
-      _loadFailed = false;
-    });
+    setState(() => _loading = true);
+    _debounce = Timer(const Duration(milliseconds: 300), _lookup);
+  }
+
+  Future<void> _lookup() async {
+    final text = _search.text;
+    final id = ++_lookupId;
     try {
-      final Iterable list;
-      if (AppConfig.useTestSchools) {
-        list = json.decode(AppConfig.testSchoolsJson) as List;
-      } else {
-        final response = await SchoolApi().getSchoolList();
-        if (response.statusCode != 200) throw Exception('Unable to load schools');
-        list = json.decode(response.body.toString()) as List;
-      }
-      final schools = list.map((item) => School.fromJson(item)).toList()
-        ..sort((a, b) => a.schoolname.compareTo(b.schoolname));
-      _cache = schools;
-      if (!mounted) return;
+      final matches = await _find(text);
+      if (!mounted || id != _lookupId) return;
       setState(() {
-        _schools = schools;
-        _matches = SchoolMatcher.find(schools, _search.text);
+        _matches = matches;
+        _loadFailed = false;
+        _loading = false;
       });
     } catch (_) {
-      if (!mounted) return;
-      setState(() => _loadFailed = true);
-    } finally {
-      if (mounted) setState(() => _loading = false);
+      if (!mounted || id != _lookupId) return;
+      setState(() {
+        _loadFailed = true;
+        _loading = false;
+      });
     }
   }
 
-  void _onChanged() =>
-      setState(() => _matches = SchoolMatcher.find(_schools, _search.text));
+  Future<SchoolMatches> _find(String text) async {
+    if (AppConfig.useTestSchools) {
+      return SchoolMatcher.find(_testSchools(), text);
+    }
+    if (_localList == null) {
+      final response = await SchoolApi().searchSchools(text);
+      var noSearchYet = response.statusCode == 404 || response.statusCode == 405;
+      if (response.statusCode == 200) {
+        try {
+          return SchoolMatcher.fromServer(_parse(response.body), text);
+        } catch (_) {
+          // A 200 that is not a school list (a catch-all page, for example) means the
+          // directory has no real search yet.
+          noSearchYet = true;
+        }
+      }
+      // 404 / 405 / unreadable 200: the directory has no search yet, so use the old list.
+      if (!noSearchYet) throw Exception('Unable to search schools');
+      final all = await SchoolApi().getSchoolList();
+      if (all.statusCode != 200) throw Exception('Unable to load schools');
+      _localList = _parse(all.body.toString())
+        ..sort((a, b) => a.schoolname.compareTo(b.schoolname));
+    }
+    return SchoolMatcher.find(_localList!, text);
+  }
+
+  static List<School>? _testList;
+  List<School> _testSchools() => _testList ??= _parse(AppConfig.testSchoolsJson);
+
+  /// A plain list, or `{"data": [...]}`.
+  static List<School> _parse(String body) {
+    final decoded = json.decode(body);
+    final list = decoded is Map ? decoded['data'] : decoded;
+    if (list is! List) throw const FormatException('Unexpected school response');
+    return list
+        .map((item) => School.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
 
   /// The keyboard's search key opens the school when only one fits.
   void _submit() {
@@ -200,10 +242,12 @@ class _SchoolFinderSheetState extends State<_SchoolFinderSheet> {
       return ErrorState(
         key: const ValueKey('error'),
         title: 'Could not load schools',
-        onRetry: () => _load(force: true),
+        onRetry: _lookup,
       );
     }
-    if (_loading && _search.text.trim().isNotEmpty) {
+    // The spinner shows only while there is nothing to show yet, so results don't flicker as the
+    // person keeps typing.
+    if (_loading && _matches.schools.isEmpty) {
       return const Center(
         key: ValueKey('loading'),
         child: SizedBox(
