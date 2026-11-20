@@ -27,7 +27,7 @@ class EssentielEmblem extends StatelessWidget {
   }
 }
 
-/// The emblem in a clean white circle with a soft shadow, for headers on a coloured background.
+/// The emblem in a clean white rounded box with a soft shadow, for headers on a coloured background.
 class EssentielMark extends StatelessWidget {
   const EssentielMark({super.key, required this.size});
 
@@ -41,7 +41,7 @@ class EssentielMark extends StatelessWidget {
       padding: EdgeInsets.all(size * 0.22),
       decoration: BoxDecoration(
         color: Colors.white,
-        shape: BoxShape.circle,
+        borderRadius: BorderRadius.circular(size * 0.28),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.18),

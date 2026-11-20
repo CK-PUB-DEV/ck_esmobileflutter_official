@@ -485,7 +485,7 @@ class SchoolAlerts {
     if (init && !_pluginReady) {
       await _plugin.initialize(
         const InitializationSettings(
-          android: AndroidInitializationSettings('@drawable/app_icon'),
+          android: AndroidInitializationSettings('@drawable/ic_stat_essentiel'),
         ),
       );
     }
@@ -497,6 +497,7 @@ class SchoolAlerts {
         android: AndroidNotificationDetails(
           'school_alerts',
           'School alerts',
+          icon: 'ic_stat_essentiel',
           channelDescription: 'Student taps and school announcements',
           importance: Importance.high,
           priority: Priority.high,

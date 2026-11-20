@@ -81,7 +81,7 @@ class PushNotifications {
 
   // static Future localNotiInit() async {
   //   const AndroidInitializationSettings initializationSettingsAndroid =
-  //       AndroidInitializationSettings('@drawable/app_icon');
+  //       AndroidInitializationSettings('@drawable/ic_stat_essentiel');
   //   final DarwinInitializationSettings initializationSettingsDarwin =
   //       DarwinInitializationSettings(
   //     onDidReceiveLocalNotification: (id, title, body, payload) => null,
@@ -100,7 +100,7 @@ class PushNotifications {
 
   static Future<void> localNotiInit() async {
     const AndroidInitializationSettings initializationSettingsAndroid =
-        AndroidInitializationSettings('@drawable/app_icon');
+        AndroidInitializationSettings('@drawable/ic_stat_essentiel');
 
     const DarwinInitializationSettings initializationSettingsDarwin =
         DarwinInitializationSettings();
@@ -142,6 +142,7 @@ class PushNotifications {
   }) async {
     const AndroidNotificationDetails androidNotificationDetails =
         AndroidNotificationDetails('your_channel_id', 'Essentiel',
+            icon: 'ic_stat_essentiel',
             channelDescription: 'Essentiel Notifications',
             importance: Importance.max,
             priority: Priority.high,

@@ -30,6 +30,9 @@ class _LoginState extends State<LoginScreen> {
     0xFFD71920,
   ); // fallback when school colour is missing
 
+  /// Both sign-in fields share one height, so the password field (with its eye button) is not taller.
+  static const _fieldHeight = kMinTap + 8;
+
   final _formKey = GlobalKey<FormState>();
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -369,14 +372,15 @@ class _LoginState extends State<LoginScreen> {
         radius: radius,
       ),
       focusedBorder: ShadBorder.fromBorderSide(
-        ShadBorderSide(color: schoolColor, width: 1.5),
+        ShadBorderSide(
+          color: scheme.mutedForeground.withValues(alpha: 0.45),
+          width: 1.5,
+        ),
         radius: radius,
       ),
-      // The soft ring around a focused field: the school colour instead of the theme's red.
-      secondaryFocusedBorder: ShadBorder.fromBorderSide(
-        ShadBorderSide(color: schoolColor.withValues(alpha: 0.25), width: 4),
-        radius: radius,
-      ),
+      // No outer ring or shadow: the theme's gray ring made focus look like a double outline.
+      disableSecondaryBorder: true,
+      shadows: const [],
       errorBorder: ShadBorder.fromBorderSide(
         ShadBorderSide(color: scheme.destructive, width: 1.5),
         radius: radius,
@@ -437,7 +441,7 @@ class _LoginState extends State<LoginScreen> {
                           padding: const EdgeInsets.all(Gap.md),
                           decoration: BoxDecoration(
                             color: Colors.white,
-                            shape: BoxShape.circle,
+                            borderRadius: BorderRadius.circular(28),
                             border: Border.all(
                               color: onHeader.withValues(alpha: 0.35),
                               width: 4,
@@ -450,7 +454,10 @@ class _LoginState extends State<LoginScreen> {
                               ),
                             ],
                           ),
-                          child: ClipOval(child: _buildSchoolLogo()),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(16),
+                            child: _buildSchoolLogo(),
+                          ),
                         ),
                         Gap.hLg,
                       ],
@@ -484,38 +491,97 @@ class _LoginState extends State<LoginScreen> {
     );
   }
 
-  /// The school as a field: shows the chosen school, or asks for one, and opens the finder.
+  /// The school as a field. Before a school is chosen it is the one action on the screen: a
+  /// search-style field that opens the finder. Once chosen it becomes a quiet "SCHOOL / name /
+  /// Change" row, so the same action is never offered twice.
   Widget _buildSchoolField({
     required ShadTextTheme text,
     required ShadColorScheme scheme,
   }) {
     final name = schoolInfo.isEmpty ? '' : schoolInfo.first.schoolname.trim();
-    return ListRow(
-      margin: EdgeInsets.zero,
-      title: name.isEmpty ? 'Select your school' : name,
-      subtitle: name.isEmpty ? null : 'Change school',
-      semanticLabel: name.isEmpty
-          ? 'School. Choose your school'
-          : 'School: $name. Change school',
-      leading: Container(
-        width: 44,
-        height: 44,
-        padding: const EdgeInsets.all(Gap.xs + 2),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          shape: BoxShape.circle,
-          border: Border.all(color: scheme.border),
-        ),
-        child: ClipOval(
-          child: name.isEmpty ? const EssentielEmblem() : _buildSchoolLogo(),
+    final chosen = hasSchool && name.isNotEmpty;
+    final radius = BorderRadius.circular(AppRadius.pill);
+    return Semantics(
+      button: true,
+      excludeSemantics: true,
+      label: chosen
+          ? 'School: $name. Change school'
+          : 'Find your school. Search by name or school code',
+      child: Material(
+        color: scheme.muted.withValues(alpha: 0.6),
+        shape: RoundedRectangleBorder(borderRadius: radius),
+        child: InkWell(
+          customBorder: RoundedRectangleBorder(borderRadius: radius),
+          onTap: _chooseSchool,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: kMinTap + 8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: Gap.lg,
+                vertical: Gap.sm,
+              ),
+              child: chosen
+                  ? Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'SCHOOL',
+                                style: text.small.copyWith(
+                                  color: scheme.mutedForeground,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 1.2,
+                                  fontSize: 11,
+                                ),
+                              ),
+                              Text(
+                                name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: text.p.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Gap.wSm,
+                        Text(
+                          'Change',
+                          style: text.small.copyWith(
+                            color: schoolColor.computeLuminance() > 0.6
+                                ? scheme.foreground
+                                : schoolColor,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    )
+                  : Row(
+                      children: [
+                        Icon(
+                          LucideIcons.search,
+                          size: IconSize.row,
+                          color: scheme.mutedForeground,
+                        ),
+                        Gap.wMd,
+                        Expanded(
+                          child: Text(
+                            'School name or code',
+                            style: text.p.copyWith(
+                              color: scheme.mutedForeground,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+          ),
         ),
       ),
-      trailing: Icon(
-        LucideIcons.chevronRight,
-        size: IconSize.inline,
-        color: scheme.mutedForeground,
-      ),
-      onTap: _chooseSchool,
     );
   }
 
@@ -533,15 +599,50 @@ class _LoginState extends State<LoginScreen> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (!hasSchool) ...[
+            Text(
+              'Find your school',
+              textAlign: TextAlign.center,
+              style: text.h3.copyWith(fontWeight: FontWeight.w800),
+            ),
+            Gap.hXl,
+          ],
           _buildSchoolField(text: text, scheme: scheme),
-          // Until a school is chosen only the school field shows; the username and password
+          // Until a school is chosen only the school field (and a hint) shows; the username and password
           // fields appear (animated) once there is a school to sign in to.
           AnimatedSize(
             duration: AppMotion.of(context, const Duration(milliseconds: 250)),
             curve: Curves.easeOutCubic,
             alignment: Alignment.topCenter,
             child: !hasSchool
-                ? const SizedBox(width: double.infinity)
+                ? Padding(
+                    padding: const EdgeInsets.only(top: Gap.xl),
+                    child: Container(
+                      padding: const EdgeInsets.all(Gap.lg),
+                      decoration: BoxDecoration(
+                        color: scheme.muted.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(AppRadius.row),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            LucideIcons.lightbulb,
+                            size: IconSize.row + 4,
+                            color: scheme.mutedForeground,
+                          ),
+                          Gap.hSm,
+                          Text(
+                            'Enter your school code or type the school name.',
+                            textAlign: TextAlign.center,
+                            style: text.small.copyWith(
+                              color: scheme.mutedForeground,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
                 : Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -550,6 +651,15 @@ class _LoginState extends State<LoginScreen> {
                         controller: _usernameController,
                         enabled: hasSchool,
                         decoration: decoration,
+                        constraints: const BoxConstraints(
+                          minHeight: _fieldHeight,
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: Gap.lg),
+                        gap: Gap.md,
+                        // The text area sets the row height (the eye button is shorter), so both
+                        // fields come out the same size with the text centred.
+                        inputPadding: const EdgeInsets.symmetric(vertical: 14),
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         textInputAction: TextInputAction.next,
                         autofillHints: const [AutofillHints.username],
                         placeholder: const Text('Student or parent username'),
@@ -567,6 +677,19 @@ class _LoginState extends State<LoginScreen> {
                         controller: _passwordController,
                         enabled: hasSchool,
                         decoration: decoration,
+                        // Less padding on the right: the eye button already brings its own.
+                        constraints: const BoxConstraints(
+                          minHeight: _fieldHeight,
+                        ),
+                        padding: const EdgeInsets.only(
+                          left: Gap.lg,
+                          right: Gap.sm,
+                        ),
+                        gap: Gap.md,
+                        // The text area sets the row height (the eye button is shorter), so both
+                        // fields come out the same size with the text centred.
+                        inputPadding: const EdgeInsets.symmetric(vertical: 14),
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         obscureText: _obscureText,
                         textInputAction: TextInputAction.done,
                         autofillHints: const [AutofillHints.password],
@@ -582,8 +705,8 @@ class _LoginState extends State<LoginScreen> {
                               ? 'Show password'
                               : 'Hide password',
                           child: ShadButton.ghost(
-                            width: kTapTarget,
-                            height: kTapTarget,
+                            width: 40,
+                            height: 40,
                             padding: EdgeInsets.zero,
                             decoration: appPillDecoration(),
                             onPressed: _togglePasswordVisibility,
@@ -644,27 +767,34 @@ class _LoginState extends State<LoginScreen> {
                     ),
                   ),
           ),
-          Gap.hXl,
-          ShadButton(
-            onPressed: _isSubmitting
-                ? null
-                : (hasSchool ? _login : _chooseSchool),
-            enabled: !_isSubmitting,
-            width: double.infinity,
-            height: kMinTap + 8,
-            backgroundColor: schoolColor,
-            foregroundColor: onButton,
-            decoration: appPillDecoration(),
-            child: _isSubmitting
-                ? SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.3,
-                      color: onButton,
+          AnimatedSize(
+            duration: AppMotion.of(context, const Duration(milliseconds: 250)),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            child: !hasSchool
+                ? const SizedBox(width: double.infinity)
+                : Padding(
+                    padding: const EdgeInsets.only(top: Gap.xl),
+                    child: ShadButton(
+                      onPressed: _isSubmitting ? null : _login,
+                      enabled: !_isSubmitting,
+                      width: double.infinity,
+                      height: kMinTap + 8,
+                      backgroundColor: schoolColor,
+                      foregroundColor: onButton,
+                      decoration: appPillDecoration(),
+                      child: _isSubmitting
+                          ? SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.3,
+                                color: onButton,
+                              ),
+                            )
+                          : const Text('Sign in'),
                     ),
-                  )
-                : Text(hasSchool ? 'Sign in' : 'Choose your school'),
+                  ),
           ),
         ],
       ),
@@ -732,6 +862,13 @@ class _LoginState extends State<LoginScreen> {
                               offset: const Offset(0, -28),
                               child: Container(
                                 width: double.infinity,
+                                // Before a school is chosen the sheet takes about half the screen,
+                                // so the first launch is not a thin strip of white.
+                                constraints: BoxConstraints(
+                                  minHeight: hasSchool || keyboardOpen
+                                      ? 0
+                                      : viewport.maxHeight * 0.5,
+                                ),
                                 decoration: BoxDecoration(
                                   color: scheme.background,
                                   borderRadius: const BorderRadius.vertical(
@@ -740,7 +877,8 @@ class _LoginState extends State<LoginScreen> {
                                 ),
                                 child: SafeArea(
                                   top: false,
-                                  child: Center(
+                                  child: Align(
+                                    alignment: Alignment.topCenter,
                                     child: ConstrainedBox(
                                       constraints: const BoxConstraints(
                                         maxWidth: 460,

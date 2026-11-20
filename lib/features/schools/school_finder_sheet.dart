@@ -64,7 +64,8 @@ class _SchoolFinderSheetState extends State<_SchoolFinderSheet> {
 
   void _onChanged() {
     _debounce?.cancel();
-    final enough = SchoolMatcher.normalize(_search.text).length >=
+    final enough =
+        SchoolMatcher.normalize(_search.text).length >=
         SchoolMatcher.minCodeLength;
     if (!enough) {
       _lookupId++;
@@ -105,7 +106,8 @@ class _SchoolFinderSheetState extends State<_SchoolFinderSheet> {
     }
     if (_localList == null) {
       final response = await SchoolApi().searchSchools(text);
-      var noSearchYet = response.statusCode == 404 || response.statusCode == 405;
+      var noSearchYet =
+          response.statusCode == 404 || response.statusCode == 405;
       if (response.statusCode == 200) {
         try {
           return SchoolMatcher.fromServer(_parse(response.body), text);
@@ -126,13 +128,15 @@ class _SchoolFinderSheetState extends State<_SchoolFinderSheet> {
   }
 
   static List<School>? _testList;
-  List<School> _testSchools() => _testList ??= _parse(AppConfig.testSchoolsJson);
+  List<School> _testSchools() =>
+      _testList ??= _parse(AppConfig.testSchoolsJson);
 
   /// A plain list, or `{"data": [...]}`.
   static List<School> _parse(String body) {
     final decoded = json.decode(body);
     final list = decoded is Map ? decoded['data'] : decoded;
-    if (list is! List) throw const FormatException('Unexpected school response');
+    if (list is! List)
+      throw const FormatException('Unexpected school response');
     return list
         .map((item) => School.fromJson(item as Map<String, dynamic>))
         .toList();
@@ -155,7 +159,10 @@ class _SchoolFinderSheetState extends State<_SchoolFinderSheet> {
     final scheme = ShadTheme.of(context).colorScheme;
     final keyboard = media.viewInsets.bottom;
     // Tall enough for five results, short enough that the keyboard never covers the field.
-    final height = (media.size.height * 0.78).clamp(0.0, media.size.height - keyboard - 72);
+    final height = (media.size.height * 0.78).clamp(
+      0.0,
+      media.size.height - keyboard - 72,
+    );
     final radius = BorderRadius.circular(AppRadius.pill);
     return Padding(
       padding: EdgeInsets.only(bottom: keyboard),
@@ -174,7 +181,10 @@ class _SchoolFinderSheetState extends State<_SchoolFinderSheet> {
                     children: [
                       Text('Find your school', style: text.h4),
                       Gap.hXs,
-                      Text('Enter your school code or name.', style: text.muted),
+                      Text(
+                        'Enter your school code or name.',
+                        style: text.muted,
+                      ),
                       Gap.hLg,
                       ShadInput(
                         controller: _search,
@@ -203,20 +213,23 @@ class _SchoolFinderSheetState extends State<_SchoolFinderSheet> {
                         decoration: ShadDecoration(
                           color: scheme.muted.withValues(alpha: 0.6),
                           border: ShadBorder.fromBorderSide(
-                            const ShadBorderSide(color: Colors.transparent, width: 1.5),
-                            radius: radius,
-                          ),
-                          focusedBorder: ShadBorder.fromBorderSide(
-                            ShadBorderSide(color: scheme.primary, width: 1.5),
-                            radius: radius,
-                          ),
-                          secondaryFocusedBorder: ShadBorder.fromBorderSide(
-                            ShadBorderSide(
-                              color: scheme.primary.withValues(alpha: 0.25),
-                              width: 4,
+                            const ShadBorderSide(
+                              color: Colors.transparent,
+                              width: 1.5,
                             ),
                             radius: radius,
                           ),
+                          focusedBorder: ShadBorder.fromBorderSide(
+                            ShadBorderSide(
+                              color: scheme.mutedForeground.withValues(
+                                alpha: 0.45,
+                              ),
+                              width: 1.5,
+                            ),
+                            radius: radius,
+                          ),
+                          disableSecondaryBorder: true,
+                          shadows: const [],
                         ),
                       ),
                     ],
@@ -224,7 +237,10 @@ class _SchoolFinderSheetState extends State<_SchoolFinderSheet> {
                 ),
                 Expanded(
                   child: AnimatedSwitcher(
-                    duration: AppMotion.of(context, const Duration(milliseconds: 220)),
+                    duration: AppMotion.of(
+                      context,
+                      const Duration(milliseconds: 220),
+                    ),
                     switchInCurve: Curves.easeOutCubic,
                     child: _body(),
                   ),
