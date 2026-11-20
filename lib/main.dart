@@ -11,6 +11,7 @@ import 'package:pushtrial/core/services/push_notifications.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:pushtrial/core/config/app_config.dart';
 import 'package:pushtrial/core/config/theme_controller.dart';
+import 'package:pushtrial/core/config/app_transitions.dart';
 import 'package:pushtrial/core/services/firebase_push.dart';
 import 'package:pushtrial/core/services/school_alerts.dart';
 import 'package:pushtrial/shared/widgets/ui/ui.dart';
@@ -239,6 +240,8 @@ class MyApp extends StatelessWidget {
         selectionHandleColor: shad.primary,
       ),
       iconTheme: IconThemeData(size: 16, color: shad.foreground),
+      // Global screen-change animation: edit lib/core/config/app_transitions.dart, not screens.
+      pageTransitionsTheme: AppTransitions.theme,
     );
     final colorScheme = base.colorScheme.copyWith(
       surface: shad.card,
@@ -399,17 +402,18 @@ class MyApp extends StatelessWidget {
             ),
           ),
           initialRoute: '/loading',
-          routes: {
-            '/loading': (context) => LoadingScreen(),
-            '/login': (context) => LoginScreen(),
-            '/home': (context) {
-              final user = ModalRoute.of(context)!.settings.arguments as User?;
-              if (user == null) {
-                return LoginScreen();
-              }
-              return DashboardScreen(user: user);
-            },
-            '/notifications': (context) => NotificationsScreen(),
+          onGenerateRoute: (settings) {
+            final WidgetBuilder? builder = switch (settings.name) {
+              '/loading' => (_) => LoadingScreen(),
+              '/login' => (_) => LoginScreen(),
+              '/home' => (_) {
+                final user = settings.arguments as User?;
+                return user == null ? LoginScreen() : DashboardScreen(user: user);
+              },
+              '/notifications' => (_) => NotificationsScreen(),
+              _ => null,
+            };
+            return builder == null ? null : AppRoute(builder: builder, settings: settings);
           },
         ),
       ),
