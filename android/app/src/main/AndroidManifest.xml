@@ -65,7 +65,11 @@
         </service>
         <meta-data
             android:name="com.ckessentiel.pushtrial.SCHOOL_ALERTS_ICON"
-            android:resource="@drawable/app_icon" />
+            android:resource="@drawable/ic_stat_essentiel" />
+        <!-- Notifications Firebase shows by itself (app in the background) use the same icon. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_stat_essentiel" />
         <!-- Firebase push is off (AppConfig.firebasePush): don't let Firebase create a push token by
              itself at startup. A build that turns it on still gets one when it asks for it. -->
         <meta-data

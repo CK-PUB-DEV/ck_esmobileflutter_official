@@ -223,7 +223,142 @@ Rules the app already assumes: a JSON list (or `{"data": [...]}`) of the same sc
 5. In the app, delete the fallback (`_localList` in `school_finder_sheet.dart`) and
    `SchoolApi.getSchoolList`.
 
-## 6. Checklist before telling schools "the list is private"
+## 6. Server-side fix: full guide
+
+Do this in the **directory repo**, the one that serves `esvault.essentiel.ph`. Nothing here is
+needed in the school repos. Assumption (not verified): it is a Laravel app with a `schools` table
+and a model that `getSchoolList` already reads. If it is plain PHP or another framework, keep the
+same rules and translate the code.
+
+### 6.1 Find the repo and read the current code
+
+1. GitHub → search `getSchoolList user:Jayvan123` (or `org:<org>`), tab **Code**. Or on the live
+   server: `grep -rl "getSchoolList" routes app` then `git remote -v` in that folder.
+2. Open `routes/api.php` and find the `getSchoolList` route. Note which controller, model and
+   table it uses, and the column names (`schoolabrv`, `schoolname`, `eslink`, `schoollogo`,
+   `system_version`, `anydesk`). **Use the real names you see**, not the sketch's.
+3. Work on a new branch, never directly on the branch the live server deploys from:
+   `git checkout -b feature/school-search`.
+
+### 6.2 Add the search route
+
+In `routes/api.php`, next to the existing list route:
+
+```php
+Route::get('schools/search', [SchoolDirectoryController::class, 'search'])
+    ->middleware('throttle:30,1');
+```
+
+`throttle:30,1` = 30 requests a minute per IP. Do not skip it: without it someone can type
+`aa`, `ab`, `ac`… and rebuild the whole list.
+
+### 6.3 Add the controller method
+
+Use the code in section 5b. Rules it must keep (the app depends on them):
+
+- fewer than 2 letters/digits typed → return `[]`;
+- text equals a school code (ignoring case, spaces, punctuation) → return **only** that school;
+- otherwise code starts with the text, or (3+ characters) name contains it → **at most 5**, sorted
+  by name;
+- return only `id, eslink, schoolabrv, schoolname, schoollogo, system_version`. **Never** `anydesk`;
+- send `Cache-Control: no-store`.
+
+If the server is older than MySQL 8 / MariaDB 10.0.5 (no `REGEXP_REPLACE`), add two columns and
+fill them once instead:
+
+```php
+// migration
+$table->string('code_key')->nullable()->index();
+$table->string('name_key')->nullable();
+// backfill (tinker or a seeder)
+School::each(fn ($s) => $s->update([
+    'code_key' => strtolower(preg_replace('/[^A-Za-z0-9]/', '', $s->schoolabrv)),
+    'name_key' => strtolower(preg_replace('/[^A-Za-z0-9]/', '', $s->schoolname)),
+]));
+```
+
+Then search on `code_key` / `name_key` and keep them updated whenever a school is saved
+(model `saving` hook).
+
+### 6.4 Test before deploying
+
+Add `tests/Feature/SchoolSearchTest.php` (adapt the factory):
+
+```php
+public function test_short_text_returns_nothing()
+{
+    $this->getJson('/api/schools/search?q=a')->assertOk()->assertExactJson([]);
+}
+public function test_exact_code_returns_only_that_school()
+{
+    School::factory()->create(['schoolabrv' => 'HCB']);
+    School::factory()->create(['schoolabrv' => 'HCHS']);
+    $this->getJson('/api/schools/search?q=hcb')->assertOk()->assertJsonCount(1);
+}
+public function test_never_more_than_five_and_never_anydesk()
+{
+    School::factory()->count(9)->create(['schoolname' => 'Holy Cross School']);
+    $r = $this->getJson('/api/schools/search?q=holy')->assertOk()->assertJsonCount(5);
+    $this->assertArrayNotHasKey('anydesk', $r->json()[0]);
+}
+```
+
+Run `php artisan test`. Also hit it by hand locally: `/api/schools/search?q=hcb`, `?q=a`, `?q=zzzz`.
+
+### 6.5 Deploy and verify
+
+1. Merge and deploy to the live server (run `php artisan route:clear` / `route:cache` if routes are cached).
+2. Open `https://esvault.essentiel.ph/api/schools/search?q=hcb` → one school.
+3. Run the Flutter app, open the finder, type a code. It now uses search (the old list is no
+   longer downloaded). Quick proof: in the server access log you see `/api/schools/search` and no
+   `/api/getSchoolList` from the new app.
+4. **Rollback** if anything is wrong: revert the deploy. The app falls back to `getSchoolList`
+   automatically (404 → old list), so users are not blocked.
+
+### 6.6 Close the old open list (last, after phones update)
+
+1. Ship the new app version and wait. Watch the access log: calls to `getSchoolList` should fall
+   steadily as people update.
+2. Raise the minimum app version / force-update the rest.
+3. Then restrict `getSchoolList` (remove it, or require a secret/token) and return 404 or 410.
+   Old apps that never updated will stop finding schools, which is why this step is last.
+4. Remove the fallback in the app (`_localList` in `school_finder_sheet.dart`, and
+   `SchoolApi.getSchoolList`).
+
+### 6.7 Prompt to paste into Claude (in the directory repo)
+
+Open the **directory repo** in VS Code, start Claude Code there, and paste:
+
+```text
+This is the directory server for the Essentiel school app (esvault.essentiel.ph). Today the route
+getSchoolList returns the whole list of schools (names, codes, live server address `eslink`,
+`anydesk`, etc.) to anyone. I need a private lookup instead. Do not break getSchoolList yet:
+old installed apps still use it.
+
+1. Audit first, change nothing: find the getSchoolList route, controller, model and table; list
+   the real column names; tell me the Laravel and database versions and whether REGEXP_REPLACE
+   is available. Report anything else that exposes the school list or `anydesk`.
+2. Then add GET /api/schools/search?q= with these rules:
+   - normalise text (lowercase, keep only a-z and 0-9) for the query and the stored code/name;
+   - fewer than 2 characters -> return [];
+   - text equals a school code -> return only that school;
+   - else code starts with the text, or (3+ characters) name contains it -> at most 5, sorted by name;
+   - return only id, eslink, schoolabrv, schoolname, schoollogo, system_version (never anydesk);
+   - throttle:30,1 and Cache-Control: no-store;
+   - response is a plain JSON array in the same shape as getSchoolList's items.
+3. If REGEXP_REPLACE is unavailable, add code_key/name_key columns with a migration, a backfill,
+   and a model saving hook.
+4. Write feature tests: short text, exact code returns one, max five, no anydesk, no match -> [].
+   Run them and show the output.
+5. Keep getSchoolList working for now, but add a comment marking it deprecated.
+6. Work on a new branch, make small commits, do not push or deploy. Finish with a summary of
+   files changed, the test results, and the exact URL to check after deploying.
+
+Mobile app contract (from the Flutter repo): it calls /api/schools/search?q=<text>, accepts a
+JSON list or {"data": [...]}, and falls back to getSchoolList on 404.
+```
+
+## 7. Checklist before telling schools "the list is private"
 
 - [ ] `search` and `{id}` endpoints live on `esvault`
 - [ ] rate limit on `search` verified

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Essentiel mark as a single-colour silhouette: Android tints status-bar icons, so a coloured PNG would show as a blank square. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="380"
+    android:viewportHeight="380">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M9,21H239V99H9ZM279,21H372V99H279ZM9,150H372V229H9ZM9,280H102V358H9ZM142,280H237V358H142ZM276,280H372V358H276Z" />
+</vector>
