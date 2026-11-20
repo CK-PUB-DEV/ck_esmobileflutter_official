@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:pushtrial/models/user.dart';
-import 'package:pushtrial/features/schools/api/school_api.dart';
 import 'package:pushtrial/shared/utils/school_utils.dart';
 import 'package:pushtrial/shared/widgets/ui/ui.dart';
 import 'dart:convert';
@@ -26,36 +25,12 @@ class _LoadingScreenState extends State<LoadingScreen> {
     if (mounted) setState(() {});
   }
 
-  Future<void> _refreshSchoolVersion(SharedPreferences prefs) async {
-    final schoolId = prefs.getInt('selectedSchoolId');
-    if (schoolId == null) return;
-
-    try {
-      final response = await SchoolApi().getSchoolList();
-      if (response.statusCode == 200) {
-        final list = json.decode(response.body) as List;
-        final school = list.firstWhere(
-          (s) => s['id'] == schoolId,
-          orElse: () => null,
-        );
-        if (school != null) {
-          final version = (school['system_version'] == 2) ? 'v2' : 'v1';
-          await prefs.setString('schoolVersion', version);
-        }
-      }
-    } catch (_) {
-      // keep whatever version is already stored
-    }
-  }
-
   Future<void> _checkLoginStatus() async {
     await Future.delayed(Duration(seconds: 2));
     await SchoolUtils.warmFromDisk();
 
     final prefs = await SharedPreferences.getInstance();
     final userJson = prefs.getString('user');
-
-    await _refreshSchoolVersion(prefs);
 
     if (!mounted) return;
 
